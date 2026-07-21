@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-session-bridge"
+version = "0.3.0"
+description = "Library + CLI (asb): discover, search, and export local coding-agent sessions (Claude, Codex, Grok, Pi) to md/html/pdf/json/zip/…"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "mano7onam" }]
+keywords = ["agents", "claude-code", "codex", "grok", "cli", "session", "mcp"]
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/mano7onam/agent-session-bridge"
+Repository = "https://github.com/mano7onam/agent-session-bridge"
+
+[project.scripts]
+asb = "agent_session_bridge.cli:main"
+agent-session-bridge = "agent_session_bridge.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["agent_session_bridge*"]
+
+[tool.setuptools.package-data]
+agent_session_bridge = ["py.typed"]
