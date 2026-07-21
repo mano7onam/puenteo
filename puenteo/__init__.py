@@ -1,28 +1,24 @@
 """
-Agent Session Bridge — **Python library + CLI** for local agent sessions.
+Puenteo — the bridge between coding agents.
 
-Install
--------
-::
+Install::
 
-    pip install -e .
+    pip install puenteo
     # CLI:
-    asb list
-    asb export <session_id> -f md -o chat.md
+    puenteo list
+    puenteo export <session_id> -f md -o chat.md
 
-Library
--------
-::
+Library::
 
-    import agent_session_bridge as asb
+    import puenteo
 
-    print(asb.status())
-    for s in asb.list_sessions(limit=10):
+    print(puenteo.status())
+    for s in puenteo.list_sessions(limit=10):
         print(s.provider, s.session_id[:8], s.title)
 
-    asb.export_session("019f7a24", fmt="pdf", output="chat.pdf")
-    hits = asb.search("export markdown")
-    msgs = asb.pull("019f7a24", query="dmg", mode="query")
+    puenteo.export_session("019f7a24", fmt="pdf", output="chat.pdf")
+    hits = puenteo.search("export markdown")
+    msgs = puenteo.pull("019f7a24", query="dmg", mode="query")
 
 Providers: Claude Code, Codex, Grok, Pi.
 Formats: md, txt, html, pdf, json, zip, csv, xml, yaml.

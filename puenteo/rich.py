@@ -1,8 +1,8 @@
-"""Rich agent transcripts for export + reuse by Terminal Dashboard and `asb`.
+"""Rich agent transcripts for export + reuse by Terminal Dashboard and puenteo CLI.
 
 This is the **shared library** surface for full conversation export (tools,
 thinking, attachments). The lightweight `providers/` package is used for fast
-list/search in the CLI; both live in `agent_session_bridge`.
+list/search in the CLI; both live in `puenteo`.
 """
 
 from __future__ import annotations

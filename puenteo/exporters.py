@@ -322,7 +322,7 @@ def _to_html(t: Transcript, *, include_tools: bool, include_thinking: bool) -> s
     <div>Messages: {t.message_count} · Images: {t.image_count}</div>
   </div>
   {"".join(rows)}
-  <footer class="meta">Exported by Agent Session Bridge (asb)</footer>
+  <footer class="meta">Exported by puenteo</footer>
 </body>
 </html>
 """

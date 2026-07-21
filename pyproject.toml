@@ -3,15 +3,17 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agent-session-bridge"
-version = "0.3.1"
-description = "Python library + CLI (asb) to list, search, and export local coding-agent sessions (Claude Code, Codex, Grok, Pi) to md/html/pdf/json/zip/csv/xml/yaml"
+name = "puenteo"
+version = "0.4.0"
+description = "Puenteo — the bridge between coding agents. List, search, and export Claude/Codex/Grok/Pi sessions to md/html/pdf/json/zip (Python library + CLI)."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "mano7onam", email = "mano7onamm@gmail.com" }]
 keywords = [
   "agents",
+  "bridge",
+  "puente",
   "claude-code",
   "codex",
   "grok",
@@ -43,20 +45,21 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "build", "twine"]
 
 [project.urls]
-Homepage = "https://github.com/mano7onam/agent-session-bridge"
-Repository = "https://github.com/mano7onam/agent-session-bridge"
-Issues = "https://github.com/mano7onam/agent-session-bridge/issues"
-Changelog = "https://github.com/mano7onam/agent-session-bridge/releases"
+Homepage = "https://github.com/mano7onam/puenteo"
+Repository = "https://github.com/mano7onam/puenteo"
+Issues = "https://github.com/mano7onam/puenteo/issues"
+Changelog = "https://github.com/mano7onam/puenteo/releases"
 
 [project.scripts]
-asb = "agent_session_bridge.cli:main"
-agent-session-bridge = "agent_session_bridge.cli:main"
+puenteo = "puenteo.cli:main"
+# short alias
+pto = "puenteo.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["agent_session_bridge*"]
+include = ["puenteo*"]
 
 [tool.setuptools.package-data]
-agent_session_bridge = ["py.typed"]
+puenteo = ["py.typed"]

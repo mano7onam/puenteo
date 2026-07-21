@@ -1,16 +1,16 @@
 """
-Public library API for Agent Session Bridge.
+Public library API for Puenteo.
 
 Prefer importing from the package root::
 
-    import agent_session_bridge as asb
+    import puenteo
 
-    sessions = asb.list_sessions(limit=20)
-    path = asb.export_session(sessions[0].session_id, fmt="md", output="chat.md")
-    hits = asb.search("gatekeeper")
-    pack = asb.pull(sessions[0].session_id, query="dmg", mode="query")
+    sessions = puenteo.list_sessions(limit=20)
+    path = puenteo.export_session(sessions[0].session_id, fmt="md", output="chat.md")
+    hits = puenteo.search("gatekeeper")
+    pack = puenteo.pull(sessions[0].session_id, query="dmg", mode="query")
 
-CLI is the same package: ``asb`` / ``python -m agent_session_bridge``.
+CLI is the same package: ``puenteo`` / ``pto`` / ``python -m puenteo``.
 """
 
 from __future__ import annotations
@@ -146,7 +146,7 @@ def pull(
     providers: Optional[Sequence[str]] = None,
     cwd: Optional[str] = None,
 ) -> List[Message]:
-    """Build a compact message pack for another agent (same as ``asb pull``)."""
+    """Build a compact message pack for another agent (same as ``puenteo pull``)."""
     sess = ref if isinstance(ref, Session) else get_session(ref, providers=providers, cwd=cwd)
     if not sess:
         raise LookupError(f"Session not found: {ref!r}")

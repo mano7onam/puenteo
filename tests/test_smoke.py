@@ -12,10 +12,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from agent_session_bridge.extract import smart_pull
-from agent_session_bridge.models import Message, Session, Transcript
-from agent_session_bridge.search import search_transcript
-from agent_session_bridge.util import extract_user_query, tokenize
+from puenteo.extract import smart_pull
+from puenteo.models import Message, Session, Transcript
+from puenteo.search import search_transcript
+from puenteo.util import extract_user_query, tokenize
 
 
 class UtilTests(unittest.TestCase):
@@ -68,7 +68,7 @@ class SearchExtractTests(unittest.TestCase):
 
 class CliHelpTests(unittest.TestCase):
     def test_parser(self):
-        from agent_session_bridge.cli import build_parser
+        from puenteo.cli import build_parser
 
         p = build_parser()
         args = p.parse_args(["list", "-n", "5"])
@@ -77,24 +77,23 @@ class CliHelpTests(unittest.TestCase):
 
 class LibraryApiTests(unittest.TestCase):
     def test_package_exports(self):
-        import agent_session_bridge as asb
+        import puenteo
 
-        self.assertTrue(asb.__version__)
-        self.assertIn("md", asb.SUPPORTED_FORMATS)
-        st = asb.status()
+        self.assertTrue(puenteo.__version__)
+        self.assertIn("md", puenteo.SUPPORTED_FORMATS)
+        st = puenteo.status()
         self.assertEqual(st["role"], "library+cli")
         self.assertIn("providers", st)
-        # list should not crash
-        sessions = asb.list_sessions(limit=3)
+        sessions = puenteo.list_sessions(limit=3)
         self.assertIsInstance(sessions, list)
 
     def test_export_bytes_roundtrip(self):
-        import agent_session_bridge as asb
+        import puenteo
 
-        sessions = asb.list_sessions(limit=1)
+        sessions = puenteo.list_sessions(limit=1)
         if not sessions:
             self.skipTest("no local sessions")
-        data, media, name = asb.export_bytes(sessions[0], fmt="md")
+        data, media, name = puenteo.export_bytes(sessions[0], fmt="md")
         self.assertTrue(data.startswith(b"#") or b"#" in data[:200] or len(data) > 0)
         self.assertIn("markdown", media)
         self.assertTrue(name.endswith(".md"))

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Install Agent Session Bridge skill into local agent skill directories.
+# Install Puenteo skill into local agent skill directories.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="$ROOT/skills/agent-session-bridge"
+SRC="$ROOT/skills/puenteo"
 
 if [[ ! -f "$SRC/SKILL.md" ]]; then
   echo "Missing $SRC/SKILL.md" >&2
@@ -24,18 +24,18 @@ link_skill() {
 
 # Grok user skills
 if [[ -d "$HOME/.grok" ]]; then
-  link_skill "$HOME/.grok/skills" "agent-session-bridge"
+  link_skill "$HOME/.grok/skills" "puenteo"
 fi
 
 # Claude Code — user skills dir (create if claude home exists)
 if [[ -d "$HOME/.claude" ]]; then
-  link_skill "$HOME/.claude/skills" "agent-session-bridge"
+  link_skill "$HOME/.claude/skills" "puenteo"
 fi
 
 # Codex skills
 if [[ -d "$HOME/.codex" ]]; then
-  link_skill "$HOME/.codex/skills" "agent-session-bridge"
+  link_skill "$HOME/.codex/skills" "puenteo"
 fi
 
 echo "Done. Restart agents / new sessions to pick up the skill."
-echo "Verify CLI: asb status"
+echo "Verify CLI: puenteo status"

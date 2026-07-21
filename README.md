@@ -1,110 +1,78 @@
-# agent-session-bridge (`asb`)
+# puenteo
 
-**Python library + CLI** to discover, search, and export local coding-agent chats.
+**The bridge between coding agents.**
 
-- **Library:** `import agent_session_bridge as asb`
-- **CLI:** `asb` / `agent-session-bridge` / `python -m agent_session_bridge`
+Python **library + CLI** to discover, search, and export local sessions from Claude Code, Codex, Grok, and Pi — to Markdown, HTML, PDF, JSON, ZIP, CSV, XML, YAML.
 
-Zero runtime dependencies. Python ≥ 3.9.
+*Puenteo* ← Spanish *puente* (bridge) + *puentear* (to bridge / jump across).
 
+Zero runtime dependencies · Python ≥ 3.9
+
+[![PyPI](https://img.shields.io/pypi/v/puenteo.svg)](https://pypi.org/project/puenteo/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Install
 
 ```bash
-git clone https://github.com/mano7onam/agent-session-bridge.git
-cd agent-session-bridge
-python3 -m venv .venv
-.venv/bin/pip install -e .
-
-# optional: put CLI on PATH
-ln -sf "$PWD/.venv/bin/asb" ~/.local/bin/asb
+pip install puenteo
+# or
+uv add puenteo
+# or
+pipx install puenteo
 ```
 
-From another project (sibling / editable):
+From source:
 
 ```bash
-pip install -e ../agent-session-bridge
+git clone https://github.com/mano7onam/puenteo.git
+cd puenteo
+python3 -m venv .venv && .venv/bin/pip install -e .
 ```
 
-## Library (primary API)
+## Library
 
 ```python
-import agent_session_bridge as asb
+import puenteo
 
-# What is installed on this machine?
-print(asb.status())
-# → providers, session counts, export_formats
+print(puenteo.status())
 
-# List sessions (Claude / Codex / Grok / Pi)
-for s in asb.list_sessions(limit=10):
-    print(s.provider, s.session_id[:8], s.title, s.cwd)
+for s in puenteo.list_sessions(limit=10):
+    print(s.provider, s.session_id[:8], s.title)
 
-# Load full transcript (rich model with tools/attachments)
-t = asb.load("019f7a24", include_tools=True)
-print(t.title, t.message_count)
+t = puenteo.load("019f7a24", include_tools=True)
+hits = puenteo.search("gatekeeper dmg")
+msgs = puenteo.pull("019f7a24", query="export", mode="query")
 
-# Search across all agents
-for hit in asb.search("gatekeeper dmg", limit=5):
-    print(hit.score, hit.session.provider, hit.snippet)
+puenteo.export_session("019f7a24", fmt="md", output="chat.md")
+puenteo.export_session("019f7a24", fmt="pdf", output="chat.pdf")
+puenteo.export_session("019f7a24", fmt="all", output="./exports/")
 
-# Compact pack for another agent
-msgs = asb.pull("019f7a24", query="export", mode="query")
-
-# Export to any common format
-asb.export_session("019f7a24", fmt="md", output="chat.md")
-asb.export_session("019f7a24", fmt="html", output="chat.html")
-asb.export_session("019f7a24", fmt="pdf", output="chat.pdf")
-asb.export_session("019f7a24", fmt="json", output="chat.json")
-asb.export_session("019f7a24", fmt="zip", output="chat.zip")   # multi-format bundle
-asb.export_session("019f7a24", fmt="all", output="./exports/") # every format
-
-# Or bytes (no disk write)
-data, media_type, filename = asb.export_bytes("019f7a24", fmt="md")
+data, media_type, filename = puenteo.export_bytes("019f7a24", fmt="html")
 ```
-
-### Public symbols
-
-| Function | Purpose |
-|----------|---------|
-| `status()` | Providers + counts + formats |
-| `list_sessions(...)` | Discover sessions |
-| `get_session(ref)` / `resolve_session` | Resolve id / path / title |
-| `load(ref, rich=True)` | Full or light transcript |
-| `search(query)` | Cross-session BM25 search |
-| `pull(ref, …)` | Smart compact context pack |
-| `export_session(ref, fmt=…)` | Write md/html/pdf/… |
-| `export_bytes(ref, fmt=…)` | In-memory export |
-| `render(transcript, fmt)` | Low-level renderer |
-| `list_sources_for_cwd(cwd)` | Sessions for a project folder |
-| `find_best_agent_transcript(cwd)` | Best match for a folder |
-
-Also used by [Terminal Dashboard](https://github.com/mano7onam/terminal-dashboard) for chat export (same parsers, no duplication).
 
 ## CLI
 
-Same package, console entry points:
-
 ```bash
-asb status
-asb list -n 20 --json
-asb list --provider claude,grok --cwd ~/dev/myapp
-asb show <id> --last 40
-asb search "topic" --json
-asb pull <id> --query "topic" --mode query --max-chars 8000
-asb export <id> -f md -o chat.md
-asb export <id> -f pdf -o chat.pdf
-asb export <id> -f html|json|zip|csv|xml|yaml -o …
-asb export <id> -f all -o ./out/
-asb export <id> -f md --tools --thinking
+puenteo status
+puenteo list -n 20 --json
+puenteo list --provider claude,grok --cwd ~/dev/myapp
+puenteo show <id> --last 40
+puenteo search "topic" --json
+puenteo pull <id> --query "topic" --mode query --max-chars 8000
+puenteo export <id> -f md -o chat.md
+puenteo export <id> -f pdf -o chat.pdf
+puenteo export <id> -f html|json|zip|csv|xml|yaml -o …
+puenteo export <id> -f all -o ./out/
 ```
 
-`<id>` = full uuid, **prefix**, filesystem path, or unique title substring.
+Short alias after install: `pto` (same as `puenteo`).
+
+`<id>` = full uuid, **prefix**, path, or unique title substring.
 
 ## Providers
 
-| Provider | On-disk store |
-|----------|----------------|
+| Provider | Store |
+|----------|--------|
 | Claude Code | `~/.claude/projects/**/*.jsonl` |
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` |
 | Grok | `~/.grok/sessions/**/chat_history.jsonl` |
@@ -112,17 +80,7 @@ asb export <id> -f md --tools --thinking
 
 ## Export formats
 
-| Format | Notes |
-|--------|--------|
-| `md` | Markdown (default) |
-| `txt` | Plain text |
-| `html` | Standalone dark theme page |
-| `pdf` | Chrome/Edge headless if present, else text PDF |
-| `json` | Structured transcript |
-| `zip` | md+html+txt+json+csv+xml+yaml + image assets |
-| `csv` | One row per message |
-| `xml` | Simple XML tree |
-| `yaml` | Minimal YAML (no PyYAML needed) |
+`md` · `txt` · `html` · `pdf` · `json` · `zip` · `csv` · `xml` · `yaml`
 
 ## Agent skill
 
@@ -130,23 +88,10 @@ asb export <id> -f md --tools --thinking
 ./scripts/install_skills.sh
 ```
 
-Installs `skills/agent-session-bridge` into `~/.grok/skills`, `~/.claude/skills`, `~/.codex/skills`.
+## Used by
 
-## Project layout
-
-```text
-agent_session_bridge/     # installable package
-  __init__.py             # public API re-exports
-  api.py                  # library surface
-  cli.py                  # asb entry point
-  providers/              # claude, codex, grok, pi
-  rich.py                 # full transcript model (export)
-  exporters.py            # md/html/pdf/…
-  search.py / extract.py  # BM25 + smart pull
-skills/                   # optional agent skill
-tests/
-```
+[Terminal Dashboard](https://github.com/mano7onam/terminal-dashboard) imports **puenteo** for chat export (shared parsers, no duplication).
 
 ## License
 
-MIT · [mano7onam/agent-session-bridge](https://github.com/mano7onam/agent-session-bridge)
+MIT · [mano7onam/puenteo](https://github.com/mano7onam/puenteo)

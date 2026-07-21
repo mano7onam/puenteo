@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agent Session Bridge CLI — discover / search / pull other agent sessions."""
+"""Puenteo CLI — discover / search / pull other agent sessions."""
 
 from __future__ import annotations
 
@@ -56,10 +56,11 @@ def _common_flags(target: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="asb",
+        prog="puenteo",
         description=(
-            f"{APP_NAME} — library + CLI to list/search/export local coding-agent "
-            "sessions (Claude Code, Codex, Grok, Pi) to md/html/pdf/json/zip/…"
+            f"{APP_NAME} — the bridge between coding agents. "
+            "List, search, and export Claude Code / Codex / Grok / Pi sessions "
+            "to md/html/pdf/json/zip/csv/xml/yaml."
         ),
     )
     p.add_argument("--version", "-V", action="version", version=f"{APP_NAME} {__version__}")
@@ -356,10 +357,10 @@ def cmd_status(*, json_mode: bool = False) -> int:
         print("Export formats:", ", ".join(SUPPORTED_FORMATS))
         print()
         print("Commands:")
-        print("  asb list --json")
-        print("  asb search 'topic' --json")
-        print("  asb pull <id> --query 'topic' --mode query")
-        print("  asb export <id> -f md|html|pdf|json|zip|csv|xml|yaml|all -o out")
+        print("  puenteo list --json")
+        print("  puenteo search 'topic' --json")
+        print("  puenteo pull <id> --query 'topic' --mode query")
+        print("  puenteo export <id> -f md|html|pdf|json|zip|csv|xml|yaml|all -o out")
     return 0
 
 

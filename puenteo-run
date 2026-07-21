@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Run puenteo without a global install.
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+if [[ -x "$ROOT/.venv/bin/puenteo" ]]; then
+  exec "$ROOT/.venv/bin/puenteo" "$@"
+fi
+export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m puenteo "$@"
