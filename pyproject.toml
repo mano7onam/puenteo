@@ -4,26 +4,52 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-session-bridge"
-version = "0.3.0"
-description = "Library + CLI (asb): discover, search, and export local coding-agent sessions (Claude, Codex, Grok, Pi) to md/html/pdf/json/zip/…"
+version = "0.3.1"
+description = "Python library + CLI (asb) to list, search, and export local coding-agent sessions (Claude Code, Codex, Grok, Pi) to md/html/pdf/json/zip/csv/xml/yaml"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "mano7onam" }]
-keywords = ["agents", "claude-code", "codex", "grok", "cli", "session", "mcp"]
+authors = [{ name = "mano7onam", email = "mano7onamm@gmail.com" }]
+keywords = [
+  "agents",
+  "claude-code",
+  "codex",
+  "grok",
+  "cli",
+  "library",
+  "export",
+  "markdown",
+  "pdf",
+  "session",
+  "developer-tools",
+]
 classifiers = [
+  "Development Status :: 4 - Beta",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Operating System :: MacOS",
+  "Operating System :: POSIX",
   "Programming Language :: Python :: 3",
-  "Topic :: Software Development",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Utilities",
+  "Typing :: Typed",
 ]
 dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
 
 [project.urls]
 Homepage = "https://github.com/mano7onam/agent-session-bridge"
 Repository = "https://github.com/mano7onam/agent-session-bridge"
+Issues = "https://github.com/mano7onam/agent-session-bridge/issues"
+Changelog = "https://github.com/mano7onam/agent-session-bridge/releases"
 
 [project.scripts]
 asb = "agent_session_bridge.cli:main"

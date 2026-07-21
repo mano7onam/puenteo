@@ -75,5 +75,30 @@ class CliHelpTests(unittest.TestCase):
         self.assertEqual(args.cmd, "list")
 
 
+class LibraryApiTests(unittest.TestCase):
+    def test_package_exports(self):
+        import agent_session_bridge as asb
+
+        self.assertTrue(asb.__version__)
+        self.assertIn("md", asb.SUPPORTED_FORMATS)
+        st = asb.status()
+        self.assertEqual(st["role"], "library+cli")
+        self.assertIn("providers", st)
+        # list should not crash
+        sessions = asb.list_sessions(limit=3)
+        self.assertIsInstance(sessions, list)
+
+    def test_export_bytes_roundtrip(self):
+        import agent_session_bridge as asb
+
+        sessions = asb.list_sessions(limit=1)
+        if not sessions:
+            self.skipTest("no local sessions")
+        data, media, name = asb.export_bytes(sessions[0], fmt="md")
+        self.assertTrue(data.startswith(b"#") or b"#" in data[:200] or len(data) > 0)
+        self.assertIn("markdown", media)
+        self.assertTrue(name.endswith(".md"))
+
+
 if __name__ == "__main__":
     unittest.main()
