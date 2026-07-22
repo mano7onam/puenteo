@@ -9,7 +9,7 @@ description = "Puenteo — the bridge between coding agents. List, search, and e
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "mano7onam", email = "mano7onamm@gmail.com" }]
+authors = [{ name = "mano", email = "andrey.matveev.mano@gmail.com" }]
 keywords = [
   "agents",
   "bridge",
