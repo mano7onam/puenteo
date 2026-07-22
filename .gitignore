@@ -11,3 +11,6 @@ venv/
 .DS_Store
 /tmp/
 *.md.bak
+
+# local launch drafts (not published with the OSS repo)
+marketing/
