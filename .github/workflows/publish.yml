@@ -1,7 +1,7 @@
 name: Publish to PyPI
 
-# Uses PyPI API token from repo secret PYPI_API_TOKEN (Settings → Secrets → Actions).
-# skip-existing avoids red X if the version was already uploaded manually.
+# Requires repo secret: PYPI_API_TOKEN (pypi-… from pypi.org)
+# environment: pypi → shows under GitHub Deployments (green when success)
 on:
   release:
     types: [published]
@@ -9,10 +9,14 @@ on:
 
 permissions:
   contents: read
+  deployments: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/puenteo/
     steps:
       - uses: actions/checkout@v4
 
