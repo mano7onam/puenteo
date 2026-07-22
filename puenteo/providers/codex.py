@@ -7,11 +7,11 @@ from typing import List, Optional
 
 from ..models import Message, Session, Transcript
 from ..util import (
+    clean_title,
+    cwd_matches,
     expand,
     first_line,
     is_noise_user_text,
-    normalize_path,
-    paths_related,
     stringify_content,
 )
 
@@ -24,7 +24,6 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
     root = _sessions_root()
     if not os.path.isdir(root):
         return []
-    cwd_n = normalize_path(cwd) if cwd else ""
     files = sorted(
         glob.glob(os.path.join(root, "**", "rollout-*.jsonl"), recursive=True),
         key=os.path.getmtime,
@@ -36,7 +35,7 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
         if not meta:
             continue
         scwd = meta.get("cwd") or ""
-        if cwd_n and scwd and not paths_related(cwd_n, scwd):
+        if cwd and not cwd_matches(cwd, scwd):
             continue
         try:
             st = os.stat(path)
@@ -102,13 +101,15 @@ def _peek_meta(path: str) -> Optional[dict]:
                     text = payload.get("message") or payload.get("text") or ""
                     if isinstance(text, dict):
                         text = stringify_content(text)
-                    if text and not is_noise_user_text(str(text)):
-                        title = first_line(str(text))
+                    cand = clean_title(str(text) if text else "")
+                    if cand:
+                        title = cand
                 if t == "response_item" and (payload.get("type") == "message"):
                     if payload.get("role") == "user" and not title:
                         text = stringify_content(payload.get("content"))
-                        if text and not is_noise_user_text(text):
-                            title = first_line(text)
+                        cand = clean_title(text)
+                        if cand:
+                            title = cand
         if title:
             meta["title"] = title
         return meta or None

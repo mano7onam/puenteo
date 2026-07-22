@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from ..models import Session, Transcript
 from . import claude, codex, grok, pi
@@ -16,11 +16,42 @@ PROVIDERS = {
 PROVIDER_NAMES = ("claude_code", "codex", "grok", "pi")
 
 
+def _parse_time_bound(value: Optional[Union[str, float, int]]) -> Optional[float]:
+    """Parse --since/--until into epoch seconds. Accepts epoch, YYYY-MM-DD, or YYYY-MM-DDTHH:MM."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip()
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    from datetime import datetime
+
+    for fmt in (
+        "%Y-%m-%d",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d %H:%M:%S",
+    ):
+        try:
+            return datetime.strptime(s, fmt).timestamp()
+        except ValueError:
+            continue
+    raise ValueError(f"Unrecognized time bound: {value!r} (use epoch or YYYY-MM-DD)")
+
+
 def list_sessions(
     *,
     providers: Optional[List[str]] = None,
     cwd: Optional[str] = None,
     limit: int = 50,
+    since: Optional[Union[str, float, int]] = None,
+    until: Optional[Union[str, float, int]] = None,
 ) -> List[Session]:
     names = providers or list(PROVIDER_NAMES)
     out: List[Session] = []
@@ -33,6 +64,14 @@ def list_sessions(
             name = "claude_code"
         out.extend(mod.list_sessions(cwd=cwd))
     out.sort(key=lambda s: s.mtime, reverse=True)
+
+    since_ts = _parse_time_bound(since)
+    until_ts = _parse_time_bound(until)
+    if since_ts is not None:
+        out = [s for s in out if (s.mtime or 0) >= since_ts]
+    if until_ts is not None:
+        out = [s for s in out if (s.mtime or 0) <= until_ts]
+
     if limit and limit > 0:
         out = out[:limit]
     return out

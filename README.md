@@ -36,14 +36,16 @@ import puenteo
 
 print(puenteo.status())
 
-for s in puenteo.list_sessions(limit=10):
+for s in puenteo.list_sessions(limit=10, cwd="~/dev/myapp"):
     print(s.provider, s.session_id[:8], s.title)
 
 t = puenteo.load("019f7a24", include_tools=True)
-hits = puenteo.search("gatekeeper dmg")
-msgs = puenteo.pull("019f7a24", query="export", mode="query")
+hits = puenteo.search("gatekeeper dmg", exclude_session="my-current-id")
+msgs = puenteo.pull("019f7a24", query="export", mode="query", top_k=15)
+print(puenteo.outline("019f7a24"))
 
 puenteo.export_session("019f7a24", fmt="md", output="chat.md")
+puenteo.export_session("019f7a24", fmt="md", output="slice.md", query="export")
 puenteo.export_session("019f7a24", fmt="pdf", output="chat.pdf")
 puenteo.export_session("019f7a24", fmt="all", output="./exports/")
 
@@ -65,17 +67,41 @@ puenteo status          # same as:
 asb status
 pto status
 
+# Discover
 puenteo list -n 20 --json
 asb list --provider claude,grok --cwd ~/dev/myapp
+asb list --since 2026-07-01 --group-by cwd
+
+# Map a session, then pull what matters
+asb outline <id>
 asb show <id> --last 40
+asb show <id> --range 100:120
 asb search "topic" --json
-asb pull <id> --query "topic" --mode query --max-chars 8000
+asb search "topic" --session <id>
+asb search "topic" --exclude-session <my-id>   # global search without yourself
+
+asb pull <id> --query "topic" --mode query --top-k 15 --max-chars 8000
+asb pull <id> --mode decisions --top-k 15
+asb pull <id> --around 500 --radius 5
+
 asb export <id> -f md -o chat.md
+asb export <id> --query "topic" -f md -o slice.md
 puenteo export <id> -f pdf -o chat.pdf
 asb export <id> -f all -o ./out/
 ```
 
-`<id>` = full uuid, **prefix**, path, or unique title substring.
+`<id>` = full uuid, **unique prefix** (e.g. `3627012b`), path, or unique title substring.
+
+### Agent handoff recipe
+
+```bash
+puenteo status
+puenteo list --cwd ~/dev/myapp
+puenteo outline <id>
+puenteo pull <id> --mode decisions --top-k 15
+puenteo search 'keyword' --session <id>
+puenteo pull <id> --around 500
+```
 
 ## Providers
 

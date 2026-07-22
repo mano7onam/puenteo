@@ -7,13 +7,14 @@ from typing import List, Optional
 
 from ..models import Message, Session, Transcript
 from ..util import (
+    clean_title,
+    cwd_matches,
     decode_url_path,
     expand,
     extract_user_query,
     first_line,
     is_noise_user_text,
-    normalize_path,
-    paths_related,
+    strip_ansi,
     stringify_content,
 )
 
@@ -26,7 +27,6 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
     root = _sessions_root()
     if not root.is_dir():
         return []
-    cwd_n = normalize_path(cwd) if cwd else ""
     out: List[Session] = []
 
     for workspace_dir in root.iterdir():
@@ -37,10 +37,10 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
         if name in ("session_search.sqlite",) or name.endswith(".sqlite"):
             continue
         workspace_cwd = decode_url_path(name)
-        if cwd_n and workspace_cwd and not paths_related(cwd_n, workspace_cwd):
-            # still allow if not a path-like decoded name
-            if workspace_cwd.startswith("/") and cwd_n not in workspace_cwd and workspace_cwd not in cwd_n:
-                continue
+        # early skip when workspace path clearly unrelated (still re-check real_cwd later)
+        if cwd and workspace_cwd.startswith("/") and not cwd_matches(cwd, workspace_cwd):
+            # may still match if summary has a different real_cwd
+            pass
 
         for sess_dir in workspace_dir.iterdir():
             if not sess_dir.is_dir():
@@ -64,7 +64,7 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
             if summary.is_file():
                 try:
                     data = json.loads(summary.read_text(encoding="utf-8", errors="replace"))
-                    title = (
+                    title = strip_ansi(
                         data.get("session_summary")
                         or data.get("title")
                         or data.get("generated_title")
@@ -87,7 +87,7 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
                 if not title:
                     title = _peek_title(chat)
 
-            if cwd_n and real_cwd and not paths_related(cwd_n, real_cwd):
+            if cwd and not cwd_matches(cwd, real_cwd):
                 continue
 
             out.append(
@@ -164,8 +164,9 @@ def _peek_title(chat_path: Path) -> str:
                     continue
                 text = stringify_content(o.get("content"))
                 text = extract_user_query(text)
-                if text and not is_noise_user_text(text):
-                    return first_line(text)
+                cand = clean_title(text)
+                if cand:
+                    return cand
     except Exception:
         pass
     return ""
@@ -204,20 +205,22 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
             if t == "user":
                 if o.get("synthetic_reason") in ("system_reminder", "compaction_meta"):
                     continue
-                text = stringify_content(o.get("content"))
+                text = strip_ansi(stringify_content(o.get("content")))
                 text = extract_user_query(text)
                 if is_noise_user_text(text):
                     continue
                 messages.append(Message(role="user", text=text, index=idx))
                 idx += 1
-                if not title or len(title) < 4:
-                    title = first_line(text)
+                if not title or len(title) < 4 or is_noise_user_text(title):
+                    cand = clean_title(text)
+                    if cand:
+                        title = cand
             elif t == "assistant":
                 content = o.get("content")
                 if isinstance(content, str):
-                    text = content
+                    text = strip_ansi(content)
                 else:
-                    text = stringify_content(content)
+                    text = strip_ansi(stringify_content(content))
                 # also surface tool_use blocks lightly
                 if include_tools and isinstance(content, list):
                     tools = []

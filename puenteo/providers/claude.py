@@ -8,12 +8,14 @@ from typing import List, Optional
 
 from ..models import Message, Session, Transcript
 from ..util import (
+    clean_title,
+    cwd_matches,
     expand,
     extract_user_query,
     first_line,
     is_noise_user_text,
     normalize_path,
-    paths_related,
+    strip_ansi,
     stringify_content,
 )
 
@@ -30,7 +32,6 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
     root = _projects_root()
     if not os.path.isdir(root):
         return []
-    cwd_n = normalize_path(cwd) if cwd else ""
     out: List[Session] = []
     pattern = os.path.join(root, "**", "*.jsonl")
     for path in glob.glob(pattern, recursive=True):
@@ -60,9 +61,9 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
         sid = sid or os.path.splitext(os.path.basename(path))[0]
         real_cwd = real_cwd or approx_cwd
 
-        if cwd_n and real_cwd and not paths_related(cwd_n, real_cwd):
-            # also allow if project dir maps under cwd filter loosely
-            if cwd_n not in real_cwd and real_cwd not in cwd_n:
+        if cwd and not cwd_matches(cwd, real_cwd):
+            # fallback: lossy encoded project dir may still contain the fragment
+            if not cwd_matches(cwd, approx_cwd) and not cwd_matches(cwd, proj):
                 continue
 
         out.append(
@@ -121,18 +122,16 @@ def _peek(path: str) -> tuple[str, str, str]:
                     cwd = str(o["cwd"])
                 t = o.get("type")
                 if t == "ai-title" and o.get("title") and not title:
-                    title = str(o["title"])[:160]
+                    cand = clean_title(str(o["title"]), 160)
+                    if cand:
+                        title = cand
                 if t == "user" and not title:
                     msg = o.get("message") or {}
                     text = stringify_content(msg.get("content"))
                     text = extract_user_query(text)
-                    if (
-                        text
-                        and not is_noise_user_text(text)
-                        and "local-command-caveat" not in text
-                        and "command-message" not in text[:80]
-                    ):
-                        title = first_line(text, 120)
+                    cand = clean_title(text, 120)
+                    if cand:
+                        title = cand
     except Exception:
         pass
     return title, cwd, sid
@@ -156,7 +155,9 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
                 continue
             t = o.get("type")
             if t == "ai-title" and o.get("title"):
-                title = str(o["title"])
+                cand = clean_title(str(o["title"]), 160)
+                if cand:
+                    title = cand
                 continue
             if t not in ("user", "assistant", "system"):
                 continue
@@ -199,7 +200,7 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
                         )
                     elif bt == "image":
                         text_parts.append("[image]")
-            text = "\n".join(p for p in text_parts if p)
+            text = strip_ansi("\n".join(p for p in text_parts if p))
             if role == "user":
                 text = extract_user_query(text)
                 if is_noise_user_text(text) and not tool_bits:
@@ -221,8 +222,10 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
     if not title:
         for m in messages:
             if m.role == "user":
-                title = first_line(m.text)
-                break
+                cand = clean_title(m.text)
+                if cand:
+                    title = cand
+                    break
 
     session.title = title or session.title
     session.cwd = cwd or session.cwd

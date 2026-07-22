@@ -137,21 +137,47 @@ def search_all(
     session_limit: int = 40,
     hit_limit: int = 20,
     per_session: int = 4,
+    exclude_session: Optional[str] = None,
+    exclude_sessions: Optional[Sequence[str]] = None,
 ) -> List[Hit]:
     sessions = list_sessions(providers=providers, cwd=cwd, limit=session_limit)
+    exclude: List[str] = []
+    if exclude_session:
+        exclude.append(exclude_session.strip())
+    if exclude_sessions:
+        exclude.extend(s.strip() for s in exclude_sessions if s and str(s).strip())
+    exclude = [e for e in exclude if e]
+
+    def _excluded(sess: Session) -> bool:
+        if not exclude:
+            return False
+        sid = sess.session_id or ""
+        for ex in exclude:
+            if not ex:
+                continue
+            # full id or unambiguous prefix (same rules agents already use for --session)
+            if sid == ex or (len(ex) >= 4 and sid.startswith(ex)):
+                return True
+        return False
+
     all_hits: List[Hit] = []
     for sess in sessions:
+        if _excluded(sess):
+            continue
         try:
             tr = load_transcript(sess, include_tools=False)
         except Exception:
             continue
         hits = search_transcript(tr, query, limit=per_session)
         # slight recency bias
-        recency = min(1.5, max(0.0, (sess.mtime or 0) / 1e12))  # tiny
         for h in hits:
-            h.score = round(h.score + 0.01 * (sess.mtime % 1000) / 1000 + recency * 0, 3)
+            h.score = round(h.score + 0.01 * (sess.mtime % 1000) / 1000, 3)
             all_hits.append(h)
-    all_hits.sort(key=lambda h: (h.score, h.session.mtime), reverse=True)
+    # primary: score; secondary: keep same-session hits together via session id
+    all_hits.sort(
+        key=lambda h: (h.score, h.session.mtime, h.session.session_id),
+        reverse=True,
+    )
     return all_hits[:hit_limit]
 
 

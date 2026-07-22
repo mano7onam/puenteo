@@ -9,11 +9,11 @@ from typing import List, Optional
 
 from ..models import Message, Session, Transcript
 from ..util import (
+    clean_title,
+    cwd_matches,
     expand,
     first_line,
     is_noise_user_text,
-    normalize_path,
-    paths_related,
     stringify_content,
 )
 
@@ -26,7 +26,6 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
     root = _root()
     if not os.path.isdir(root):
         return []
-    cwd_n = normalize_path(cwd) if cwd else ""
     files = sorted(
         glob.glob(os.path.join(root, "**", "*.jsonl"), recursive=True),
         key=os.path.getmtime,
@@ -38,7 +37,7 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
         if not meta:
             continue
         scwd = meta.get("cwd") or ""
-        if cwd_n and scwd and not paths_related(cwd_n, scwd):
+        if cwd and not cwd_matches(cwd, scwd):
             continue
         try:
             st = os.stat(path)
@@ -98,8 +97,9 @@ def _peek(path: str) -> Optional[dict]:
                     msg = o.get("message") or {}
                     if msg.get("role") == "user" and not title:
                         text = stringify_content(msg.get("content"))
-                        if text and not is_noise_user_text(text):
-                            title = first_line(text)
+                        cand = clean_title(text)
+                        if cand:
+                            title = cand
         return {"session_id": sid, "cwd": cwd, "title": title}
     except Exception:
         return None

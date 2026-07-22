@@ -6,6 +6,11 @@ import urllib.parse
 from datetime import datetime, timezone
 from typing import Any, Iterable, List, Optional
 
+# CSI / OSC-ish ANSI sequences (colors, bold, etc.)
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]")
+# Also catch leftover SGR fragments like "[1m" that sometimes remain after partial strip
+_ANSI_FRAG_RE = re.compile(r"\x1b\[[0-9;]*m|\[\d{1,3}m")
+
 
 def expand(path: str) -> str:
     return os.path.abspath(os.path.expanduser(path))
@@ -21,11 +26,57 @@ def normalize_path(path: Optional[str]) -> str:
 
 
 def paths_related(a: str, b: str) -> bool:
+    """True if either path is equal or a parent/child of the other."""
     a = normalize_path(a).rstrip("/")
     b = normalize_path(b).rstrip("/")
     if not a or not b:
         return False
     return a == b or a.startswith(b + "/") or b.startswith(a + "/")
+
+
+def cwd_matches(filter_cwd: Optional[str], session_cwd: Optional[str]) -> bool:
+    """
+    Whether a session cwd matches a list/search --cwd filter.
+
+    Semantics (project-centric, not parent-broad):
+    - empty filter → match all
+    - absolute/~ path → session cwd equals filter or is under it
+    - bare fragment (e.g. ``harbor-datasets``) → substring of session cwd
+    """
+    if not filter_cwd or not str(filter_cwd).strip():
+        return True
+    if not session_cwd or not str(session_cwd).strip():
+        return False
+
+    raw = str(filter_cwd).strip()
+    sess = normalize_path(session_cwd).rstrip("/")
+    if not sess:
+        return False
+
+    looks_abs = (
+        raw.startswith("~")
+        or raw.startswith("/")
+        or (len(raw) > 1 and raw[1] == ":")  # Windows drive
+    )
+    if looks_abs:
+        filt = normalize_path(raw).rstrip("/")
+        if not filt:
+            return False
+        # session is this project or a subdirectory — not a parent project session
+        return sess == filt or sess.startswith(filt + "/")
+
+    # fragment / basename style
+    frag = raw.lower().rstrip("/")
+    return frag in sess.lower()
+
+
+def strip_ansi(text: Optional[str]) -> str:
+    """Remove ANSI escape sequences and common leftover SGR fragments."""
+    if not text:
+        return ""
+    t = _ANSI_RE.sub("", text)
+    t = _ANSI_FRAG_RE.sub("", t)
+    return t
 
 
 def format_mtime(ts: float) -> str:
@@ -115,16 +166,30 @@ def clip(text: str, max_chars: int) -> str:
 
 
 def first_line(text: str, n: int = 120) -> str:
-    line = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
+    cleaned = strip_ansi(text or "")
+    line = cleaned.strip().splitlines()[0] if cleaned.strip() else ""
     # strip common wrappers
-    for tag in ("<user_query>", "</user_query>", "<user_info>", "</user_info>"):
+    for tag in (
+        "<user_query>",
+        "</user_query>",
+        "<user_info>",
+        "</user_info>",
+        "<local-command-stdout>",
+        "</local-command-stdout>",
+        "<local-command-stderr>",
+        "</local-command-stderr>",
+        "<command-message>",
+        "</command-message>",
+        "<command-name>",
+        "</command-name>",
+    ):
         line = line.replace(tag, "")
     line = " ".join(line.split())
     return line[:n]
 
 
 def is_noise_user_text(text: str) -> bool:
-    t = (text or "").strip()
+    t = strip_ansi(text or "").strip()
     if not t:
         return True
     if t.startswith("<user_info>") or t.startswith("<system-reminder>"):
@@ -133,9 +198,26 @@ def is_noise_user_text(text: str) -> bool:
         return True
     if t.startswith("<environment_context>") or t.startswith("<local-command-caveat>"):
         return True
+    # Claude slash-command / local-command wrappers (not real user intent)
+    if t.startswith("<local-command-") or "<local-command-" in t[:80]:
+        return True
+    if t.startswith("<command-message>") or t.startswith("<command-name>"):
+        return True
+    if t.startswith("Set model to ") and len(t) < 200:
+        return True
     if "synthetic" in t[:40].lower() and len(t) < 80:
         return True
     return False
+
+
+def clean_title(text: Optional[str], n: int = 120) -> str:
+    """Title-safe first line: no ANSI, no command noise wrappers."""
+    if not text:
+        return ""
+    t = strip_ansi(text)
+    if is_noise_user_text(t):
+        return ""
+    return first_line(t, n)
 
 
 def extract_user_query(text: str) -> str:
