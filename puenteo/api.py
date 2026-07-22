@@ -39,24 +39,23 @@ def status() -> Dict[str, Any]:
     """Discover which agent stores exist and how many sessions each has."""
     from pathlib import Path as P
 
-    homes = {
-        "claude_code": P.home() / ".claude" / "projects",
-        "codex": P.home() / ".codex" / "sessions",
-        "grok": P.home() / ".grok" / "sessions",
-        "pi": P.home() / ".pi" / "agent" / "sessions",
-    }
+    from .providers import PROVIDER_HOMES, PROVIDER_NAMES
+
     providers: Dict[str, Any] = {}
-    for name, path in homes.items():
-        exists = path.is_dir()
+    for name in PROVIDER_NAMES:
+        raw = PROVIDER_HOMES.get(name, "")
+        path = None
+        if raw.startswith("~") or raw.startswith("/"):
+            path = P(os.path.expanduser(raw.split()[0]))
+        exists = bool(path and (path.is_dir() or path.is_file()))
         count = 0
-        if exists:
-            try:
-                count = len(list_sessions(providers=[name], limit=500))
-            except Exception:
-                count = 0
+        try:
+            count = len(list_sessions(providers=[name], limit=500))
+        except Exception:
+            count = 0
         providers[name] = {
-            "path": str(path),
-            "exists": exists,
+            "path": raw if raw else str(path or ""),
+            "exists": exists if path else count > 0,
             "sessions": count,
         }
     return {

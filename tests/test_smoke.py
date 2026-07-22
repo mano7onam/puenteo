@@ -204,6 +204,33 @@ class LibraryApiTests(unittest.TestCase):
         self.assertEqual(ol["session_id"], sessions[0].session_id)
 
 
+class MultiProviderTests(unittest.TestCase):
+    def test_provider_names_include_new(self):
+        from puenteo.providers import PROVIDER_NAMES, PROVIDERS, normalize_provider_name
+
+        for name in ("antigravity", "qwen", "cursor", "aider", "goose", "openhands"):
+            self.assertIn(name, PROVIDER_NAMES)
+            self.assertIn(name, PROVIDERS)
+        self.assertEqual(normalize_provider_name("agy"), "antigravity")
+        self.assertEqual(normalize_provider_name("claude"), "claude_code")
+
+    def test_antigravity_list_if_present(self):
+        from pathlib import Path
+
+        from puenteo.providers import list_sessions, load_transcript
+
+        brain = Path.home() / ".gemini" / "antigravity" / "brain"
+        if not brain.is_dir():
+            self.skipTest("no antigravity brain")
+        ss = list_sessions(providers=["antigravity"], limit=5)
+        self.assertTrue(ss)
+        tr = load_transcript(ss[0])
+        self.assertIsInstance(tr.messages, list)
+        # cwd should not be antigravity internal path when a real project exists
+        if tr.session.cwd:
+            self.assertNotIn("/.gemini/antigravity/brain/", tr.session.cwd.replace("\\", "/"))
+
+
 class LiveCwdTitleTests(unittest.TestCase):
     """Integration checks against real local stores when present."""
 

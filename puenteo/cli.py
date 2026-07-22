@@ -17,19 +17,12 @@ from .version import APP_NAME, __version__
 def _parse_providers(raw: Optional[str]) -> Optional[List[str]]:
     if not raw or raw in ("all", "*"):
         return None
+    from .providers import normalize_provider_name
+
     parts = [p.strip().lower() for p in raw.split(",") if p.strip()]
     mapped = []
     for p in parts:
-        if p in ("claude", "claude_code", "claude-code"):
-            mapped.append("claude_code")
-        elif p in ("codex", "openai"):
-            mapped.append("codex")
-        elif p in ("grok", "xai"):
-            mapped.append("grok")
-        elif p in ("pi", "pi-agent"):
-            mapped.append("pi")
-        else:
-            mapped.append(p)
+        mapped.append(normalize_provider_name(p))
     return mapped or None
 
 
@@ -58,7 +51,7 @@ def _common_flags(target: argparse.ArgumentParser) -> None:
         "--provider",
         "-p",
         default=argparse.SUPPRESS,
-        help="claude|codex|grok|pi|all or comma list (default: all)",
+        help="claude|codex|grok|pi|antigravity|qwen|gemini|cursor|continue|aider|openhands|goose|all (comma list ok)",
     )
     target.add_argument(
         "--cwd",
@@ -505,20 +498,24 @@ def cmd_status(*, json_mode: bool = False) -> int:
     from pathlib import Path
 
     from .exporters import SUPPORTED_FORMATS
+    from .providers import PROVIDER_HOMES, PROVIDER_NAMES
 
-    homes = {
-        "claude_code": Path.home() / ".claude" / "projects",
-        "codex": Path.home() / ".codex" / "sessions",
-        "grok": Path.home() / ".grok" / "sessions",
-        "pi": Path.home() / ".pi" / "agent" / "sessions",
-    }
     info = {}
-    for name, path in homes.items():
-        exists = path.is_dir()
+    for name in PROVIDER_NAMES:
+        raw = PROVIDER_HOMES.get(name, "")
+        # only path-like homes for exists check
+        path = Path(os.path.expanduser(raw.split()[0])) if raw.startswith("~") or raw.startswith("/") else None
+        exists = bool(path and (path.is_dir() or path.is_file()))
         count = 0
-        if exists:
+        try:
             count = len(list_sessions(providers=[name], limit=500))
-        info[name] = {"path": str(path), "exists": exists, "sessions": count}
+        except Exception:
+            count = 0
+        info[name] = {
+            "path": raw,
+            "exists": exists if path else count > 0,
+            "sessions": count,
+        }
 
     if json_mode:
         print(
@@ -543,7 +540,7 @@ def cmd_status(*, json_mode: bool = False) -> int:
         print(f"{APP_NAME} v{__version__}  (library + CLI)")
         print("Providers:")
         for name, d in info.items():
-            mark = "OK" if d["exists"] else "—"
+            mark = "OK" if d["exists"] or d["sessions"] else "—"
             print(f"  [{mark}] {name:12}  sessions≈{d['sessions']:<4}  {d['path']}")
         print()
         print("Export formats:", ", ".join(SUPPORTED_FORMATS))
@@ -551,7 +548,7 @@ def cmd_status(*, json_mode: bool = False) -> int:
         print("Session ref: full uuid, unique prefix (e.g. 3627012b), path, or title substring")
         print()
         print("Commands:")
-        print("  puenteo list --cwd ~/proj --json")
+        print("  puenteo list --provider antigravity,claude --cwd ~/proj --json")
         print("  asb list --since 2026-07-01 --group-by cwd")
         print("  asb outline <id>")
         print("  asb search 'topic' --exclude-session <my-id> --json")

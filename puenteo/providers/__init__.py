@@ -3,17 +3,89 @@ from __future__ import annotations
 from typing import List, Optional, Union
 
 from ..models import Session, Transcript
-from . import claude, codex, grok, pi
+from . import (
+    aider,
+    antigravity,
+    claude,
+    codex,
+    continue_dev,
+    cursor,
+    gemini_cli,
+    goose,
+    grok,
+    openhands,
+    pi,
+    qwen,
+)
 
+# Canonical provider name → module
 PROVIDERS = {
     "claude_code": claude,
     "claude": claude,
     "codex": codex,
     "grok": grok,
     "pi": pi,
+    "antigravity": antigravity,
+    "agy": antigravity,
+    "qwen": qwen,
+    "aider": aider,
+    "cursor": cursor,
+    "continue": continue_dev,
+    "continue_dev": continue_dev,
+    "openhands": openhands,
+    "opendevin": openhands,
+    "goose": goose,
+    "gemini": gemini_cli,
+    "gemini_cli": gemini_cli,
 }
 
-PROVIDER_NAMES = ("claude_code", "codex", "grok", "pi")
+# Display / default scan order (primary names only)
+PROVIDER_NAMES = (
+    "claude_code",
+    "codex",
+    "grok",
+    "pi",
+    "antigravity",
+    "qwen",
+    "gemini",
+    "cursor",
+    "continue",
+    "aider",
+    "openhands",
+    "goose",
+)
+
+# Human-friendly aliases for --provider
+PROVIDER_ALIASES = {
+    "claude": "claude_code",
+    "claude-code": "claude_code",
+    "claude_code": "claude_code",
+    "codex": "codex",
+    "openai": "codex",
+    "grok": "grok",
+    "xai": "grok",
+    "pi": "pi",
+    "pi-agent": "pi",
+    "antigravity": "antigravity",
+    "agy": "antigravity",
+    "google-antigravity": "antigravity",
+    "qwen": "qwen",
+    "qwen-code": "qwen",
+    "gemini": "gemini",
+    "gemini-cli": "gemini",
+    "cursor": "cursor",
+    "continue": "continue",
+    "continue.dev": "continue",
+    "aider": "aider",
+    "openhands": "openhands",
+    "opendevin": "openhands",
+    "goose": "goose",
+}
+
+
+def normalize_provider_name(name: str) -> str:
+    n = (name or "").strip().lower()
+    return PROVIDER_ALIASES.get(n, n)
 
 
 def _parse_time_bound(value: Optional[Union[str, float, int]]) -> Optional[float]:
@@ -53,16 +125,24 @@ def list_sessions(
     since: Optional[Union[str, float, int]] = None,
     until: Optional[Union[str, float, int]] = None,
 ) -> List[Session]:
-    names = providers or list(PROVIDER_NAMES)
+    if providers:
+        names = []
+        for p in providers:
+            n = normalize_provider_name(p)
+            if n not in names:
+                names.append(n)
+    else:
+        names = list(PROVIDER_NAMES)
+
     out: List[Session] = []
     for name in names:
         mod = PROVIDERS.get(name)
         if not mod:
             continue
-        # normalize claude alias
-        if name == "claude":
-            name = "claude_code"
-        out.extend(mod.list_sessions(cwd=cwd))
+        try:
+            out.extend(mod.list_sessions(cwd=cwd))
+        except Exception:
+            continue
     out.sort(key=lambda s: s.mtime, reverse=True)
 
     since_ts = _parse_time_bound(since)
@@ -78,9 +158,8 @@ def list_sessions(
 
 
 def load_transcript(session: Session, *, include_tools: bool = False) -> Transcript:
-    mod = PROVIDERS.get(session.provider) or PROVIDERS.get(
-        "claude_code" if session.provider == "claude" else session.provider
-    )
+    name = normalize_provider_name(session.provider)
+    mod = PROVIDERS.get(name) or PROVIDERS.get(session.provider)
     if not mod:
         raise ValueError(f"Unknown provider: {session.provider}")
     return mod.load_transcript(session, include_tools=include_tools)
@@ -98,25 +177,61 @@ def resolve_session(
     ref = (ref or "").strip()
     if not ref:
         return None
-    if os.path.isfile(ref):
+    if os.path.isfile(ref) or os.path.isdir(ref):
+        path = os.path.abspath(os.path.expanduser(ref))
+        path_l = path.replace("\\", "/")
         # infer provider from path
-        path = os.path.abspath(ref)
-        if "/.claude/" in path or (path.endswith(".jsonl") and "projects" in path):
+        if "/.claude/" in path_l or (path_l.endswith(".jsonl") and "projects" in path_l and "claude" in path_l):
             return claude.session_from_path(path)
-        if "/.codex/" in path:
+        if "/.codex/" in path_l:
             return codex.session_from_path(path)
-        if "/.grok/" in path:
+        if "/.grok/" in path_l:
             return grok.session_from_path(path)
-        if "/.pi/" in path:
+        if "/.pi/" in path_l:
             return pi.session_from_path(path)
+        if "antigravity" in path_l:
+            return antigravity.session_from_path(path)
+        if "/.qwen/" in path_l:
+            return qwen.session_from_path(path)
+        if "/.gemini/" in path_l:
+            s = gemini_cli.session_from_path(path)
+            if s:
+                return s
+            return antigravity.session_from_path(path)
+        if "Cursor" in path or "/.cursor/" in path_l:
+            return cursor.session_from_path(path)
+        if "/.continue/" in path_l:
+            return continue_dev.session_from_path(path)
+        if "aider" in os.path.basename(path).lower():
+            return aider.session_from_path(path)
+        if "openhands" in path_l:
+            return openhands.session_from_path(path)
+        if "goose" in path_l:
+            return goose.session_from_path(path)
         # try all
-        for mod in (claude, codex, grok, pi):
-            s = mod.session_from_path(path)
+        for mod in (
+            claude,
+            codex,
+            grok,
+            pi,
+            antigravity,
+            qwen,
+            gemini_cli,
+            cursor,
+            continue_dev,
+            aider,
+            openhands,
+            goose,
+        ):
+            try:
+                s = mod.session_from_path(path)
+            except Exception:
+                s = None
             if s:
                 return s
         return None
 
-    sessions = list_sessions(providers=providers, cwd=cwd, limit=500)
+    sessions = list_sessions(providers=providers, cwd=cwd, limit=800)
     ref_l = ref.lower()
 
     # exact id
@@ -128,7 +243,6 @@ def resolve_session(
     if len(hits) == 1:
         return hits[0]
     if len(hits) > 1:
-        # newest
         return hits[0]
 
     # title substring
@@ -142,3 +256,20 @@ def resolve_session(
         return hits[0]
 
     return None
+
+
+# Known on-disk roots for status / doctor
+PROVIDER_HOMES = {
+    "claude_code": "~/.claude/projects",
+    "codex": "~/.codex/sessions",
+    "grok": "~/.grok/sessions",
+    "pi": "~/.pi/agent/sessions",
+    "antigravity": "~/.gemini/antigravity/brain",
+    "qwen": "~/.qwen/projects",
+    "gemini": "~/.gemini",
+    "cursor": "~/Library/Application Support/Cursor",
+    "continue": "~/.continue",
+    "aider": "project/.aider.chat.history.md (scan with --cwd or PUENTEO_AIDER_ROOTS)",
+    "openhands": "~/.openhands/openhands.db",
+    "goose": "~/.config/goose",
+}

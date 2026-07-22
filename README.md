@@ -111,6 +111,19 @@ puenteo pull <id> --around 500
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` |
 | Grok | `~/.grok/sessions/**/chat_history.jsonl` |
 | Pi | `~/.pi/agent/sessions/**/*.jsonl` |
+| **Antigravity** | `~/.gemini/antigravity/brain/*/…/transcript*.jsonl` |
+| Qwen Code | `~/.qwen/projects/**/chats/*` |
+| Gemini CLI | `~/.gemini` (non-antigravity chat dumps) |
+| Cursor | `~/Library/Application Support/Cursor/**/state.vscdb` |
+| Continue | `~/.continue/sessions/**` |
+| Aider | `.aider.chat.history.md` (scan with `--cwd` or `PUENTEO_AIDER_ROOTS`) |
+| OpenHands | `~/.openhands/openhands.db` |
+| Goose | `~/.config/goose/**` |
+
+```bash
+asb list --provider antigravity,claude -n 20
+asb pull <agy-id> --query "topic" --mode query
+```
 
 ## Export formats
 

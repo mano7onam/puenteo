@@ -91,6 +91,14 @@ asb show <id> --last 40
 | `codex` | `~/.codex/sessions/` |
 | `grok` | `~/.grok/sessions/` |
 | `pi` | `~/.pi/agent/sessions/` |
+| `antigravity` / `agy` | `~/.gemini/antigravity/brain/` |
+| `qwen` | `~/.qwen/projects/` |
+| `gemini` | `~/.gemini` (CLI chats) |
+| `cursor` | Cursor Application Support DBs |
+| `continue` | `~/.continue/` |
+| `aider` | `.aider.chat.history.md` (needs `--cwd` or `PUENTEO_AIDER_ROOTS`) |
+| `openhands` | `~/.openhands/openhands.db` |
+| `goose` | `~/.config/goose/` |
 
 ## Recipe
 

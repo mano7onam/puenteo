@@ -15,7 +15,13 @@ def session_row(s: Session) -> str:
         "claude_code": "claude",
         "codex": "codex",
         "grok": "grok",
+        "antigravity": "agy",
+        "continue_dev": "continue",
+        "gemini_cli": "gemini",
+        "openhands": "ohands",
     }.get(s.provider, s.provider)
+    if len(prov) > 7:
+        prov = prov[:7]
     cwd = s.cwd or "—"
     if len(cwd) > 48:
         cwd = "…" + cwd[-47:]

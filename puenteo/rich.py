@@ -224,6 +224,28 @@ def load_transcript(
         return _load_grok(path, include_tools=include_tools, include_thinking=include_thinking)
     if provider == "pi":
         return _load_pi(path, include_tools=include_tools, include_thinking=include_thinking)
+    # New providers share the light loader path
+    if provider in (
+        "antigravity",
+        "agy",
+        "qwen",
+        "gemini",
+        "gemini_cli",
+        "cursor",
+        "continue",
+        "continue_dev",
+        "aider",
+        "openhands",
+        "opendevin",
+        "goose",
+    ):
+        return _load_from_light_provider(
+            provider,
+            path,
+            include_tools=include_tools,
+            include_thinking=include_thinking,
+            display_name=provider,
+        )
     raise ValueError(f"Unknown provider: {provider}")
 
 
@@ -240,12 +262,7 @@ def find_best_agent_transcript(
     If prefer_title is set (terminal window title), rank by title similarity first
     so two Ghostty windows in the same folder don't share the wrong chat.
     """
-    candidates = (
-        list_claude_sessions(cwd)
-        + list_codex_sessions(cwd)
-        + list_grok_sessions(cwd)
-        + list_pi_sessions(cwd)
-    )
+    candidates = list_sources_for_cwd(cwd)
     if not candidates:
         return None
 
@@ -284,14 +301,40 @@ def find_best_agent_transcript(
 
 
 def list_sources_for_cwd(cwd: str) -> List[Dict[str, Any]]:
-    """Claude + Codex + Grok + Pi sessions related to this project folder."""
+    """All known agent sessions related to this project folder."""
     out = (
         list_claude_sessions(cwd)
         + list_codex_sessions(cwd)
         + list_grok_sessions(cwd)
         + list_pi_sessions(cwd)
+        + list_extra_provider_sessions(cwd)
     )
     out.sort(key=lambda x: x.get("mtime") or 0, reverse=True)
+    return out
+
+
+def list_extra_provider_sessions(cwd: str, limit: int = 40) -> List[Dict[str, Any]]:
+    """Antigravity, Qwen, Cursor, Continue, Aider, OpenHands, Goose, Gemini CLI."""
+    out: List[Dict[str, Any]] = []
+    for name in (
+        "antigravity",
+        "qwen",
+        "gemini",
+        "cursor",
+        "continue",
+        "aider",
+        "openhands",
+        "goose",
+    ):
+        try:
+            from .providers import PROVIDERS
+
+            mod = PROVIDERS.get(name)
+            if not mod:
+                continue
+            out.extend(_sessions_from_provider(mod, name, cwd, limit))
+        except Exception:
+            continue
     return out
 
 
