@@ -36,6 +36,8 @@ class UtilTests(unittest.TestCase):
         self.assertEqual(clean_title(t), "")
 
     def test_cwd_matches(self):
+        from puenteo.util import path_slash
+
         self.assertTrue(
             cwd_matches(
                 "/Users/x/dev/harbor-datasets",
@@ -57,6 +59,18 @@ class UtilTests(unittest.TestCase):
         )
         self.assertTrue(cwd_matches("harbor-datasets", "/Users/x/dev/harbor-datasets"))
         self.assertTrue(cwd_matches("", "/any"))
+        # portable slash normalization (Windows-style input)
+        self.assertEqual(path_slash(r"C:\Users\x\dev"), "C:/Users/x/dev")
+        # fragment match after slash-normalize
+        self.assertTrue(cwd_matches("proj", path_slash(r"C:\Users\x\proj\work")))
+
+    def test_platform_app_support_dirs(self):
+        from puenteo.util import platform_app_support_dirs
+
+        roots = platform_app_support_dirs("Cursor")
+        self.assertTrue(roots)
+        joined = " ".join(str(r) for r in roots)
+        self.assertTrue("Cursor" in joined)
 
 
 class SearchExtractTests(unittest.TestCase):

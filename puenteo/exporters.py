@@ -453,17 +453,48 @@ def _to_pdf(t: Transcript, *, include_tools: bool, include_thinking: bool) -> by
 
 
 def _find_chrome() -> Optional[str]:
-    candidates = [
+    """Locate a Chromium-based browser for headless PDF (macOS / Linux / Windows)."""
+    import sys
+
+    candidates: List[Optional[str]] = [
+        # PATH first (Linux packages, Windows if on PATH, macOS brew casks sometimes)
+        shutil.which("google-chrome"),
+        shutil.which("google-chrome-stable"),
+        shutil.which("chromium"),
+        shutil.which("chromium-browser"),
+        shutil.which("chrome"),
+        shutil.which("msedge"),
+        shutil.which("brave-browser"),
+        # macOS app bundles
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         "/Applications/Chromium.app/Contents/MacOS/Chromium",
         "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
         "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
-        shutil.which("google-chrome"),
-        shutil.which("chromium"),
-        shutil.which("chromium-browser"),
+        # Linux common install paths
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/snap/bin/chromium",
     ]
+    if sys.platform == "win32":
+        pf = os.environ.get("PROGRAMFILES", r"C:\Program Files")
+        pf86 = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
+        local = os.environ.get("LOCALAPPDATA", "")
+        candidates.extend(
+            [
+                os.path.join(pf, "Google", "Chrome", "Application", "chrome.exe"),
+                os.path.join(pf86, "Google", "Chrome", "Application", "chrome.exe"),
+                os.path.join(local, "Google", "Chrome", "Application", "chrome.exe") if local else None,
+                os.path.join(pf, "Microsoft", "Edge", "Application", "msedge.exe"),
+                os.path.join(pf86, "Microsoft", "Edge", "Application", "msedge.exe"),
+                os.path.join(pf, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            ]
+        )
     for c in candidates:
-        if c and os.path.isfile(c) and os.access(c, os.X_OK):
+        if not c:
+            continue
+        if os.path.isfile(c) and (sys.platform == "win32" or os.access(c, os.X_OK)):
             return c
     return None
 

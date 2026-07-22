@@ -1,4 +1,10 @@
-"""Cursor IDE chats (Application Support state DBs / composer data)."""
+"""Cursor IDE chats (platform app-data dirs / composer data).
+
+macOS:   ~/Library/Application Support/Cursor
+Windows: %APPDATA%/Cursor  (and Local)
+Linux:   ~/.config/Cursor
+Also:    ~/.cursor when present
+"""
 
 from __future__ import annotations
 
@@ -9,16 +15,30 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..models import Message, Session, Transcript
-from ..util import clean_title, cwd_matches, expand, strip_ansi, stringify_content
+from ..util import (
+    clean_title,
+    cwd_matches,
+    expand,
+    platform_app_support_dirs,
+    strip_ansi,
+    stringify_content,
+)
 
 
 def _support_roots() -> List[Path]:
+    roots = platform_app_support_dirs("Cursor", "Cursor Nightly")
+    # legacy / portable
     home = Path(expand("~"))
-    return [
-        home / "Library" / "Application Support" / "Cursor",
-        home / ".cursor",
-        home / "Library" / "Application Support" / "Cursor Nightly",
-    ]
+    roots.append(home / ".cursor")
+    # dedupe
+    seen = set()
+    out: List[Path] = []
+    for r in roots:
+        k = str(r)
+        if k not in seen:
+            seen.add(k)
+            out.append(r)
+    return out
 
 
 def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
@@ -199,7 +219,15 @@ def _workspace_cwd(workspace_dir: Path) -> str:
         data = json.loads(wf.read_text(encoding="utf-8", errors="replace"))
         folder = data.get("folder") or data.get("workspace")
         if isinstance(folder, str) and folder.startswith("file://"):
-            return folder[len("file://") :]
+            # file:///Users/... or file:///C:/Users/...
+            from urllib.parse import unquote, urlparse
+
+            u = urlparse(folder)
+            path = unquote(u.path or "")
+            # Windows file:///C:/... → path is /C:/... — strip leading slash
+            if len(path) >= 3 and path[0] == "/" and path[2] == ":":
+                path = path[1:]
+            return path
         if isinstance(folder, str):
             return folder
     except Exception:

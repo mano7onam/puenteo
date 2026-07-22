@@ -12,12 +12,36 @@ from ..util import clean_title, cwd_matches, expand, strip_ansi, stringify_conte
 
 
 def _roots() -> List[Path]:
+    import sys
+
     home = Path(expand("~"))
-    return [
+    roots = [
         home / ".config" / "goose",
         home / ".local" / "share" / "goose",
         home / ".goose",
     ]
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA") or str(home / "AppData" / "Roaming")
+        local = os.environ.get("LOCALAPPDATA") or str(home / "AppData" / "Local")
+        roots = [
+            Path(appdata) / "goose",
+            Path(local) / "goose",
+            home / ".goose",
+            home / ".config" / "goose",
+        ]
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME")
+        if xdg:
+            roots.insert(0, Path(xdg) / "goose")
+    # dedupe
+    seen = set()
+    out = []
+    for r in roots:
+        k = str(r)
+        if k not in seen:
+            seen.add(k)
+            out.append(r)
+    return out
 
 
 def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:

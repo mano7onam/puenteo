@@ -37,32 +37,16 @@ from .rich import Attachment, Message as RichMessage, Transcript as RichTranscri
 
 def status() -> Dict[str, Any]:
     """Discover which agent stores exist and how many sessions each has."""
-    from pathlib import Path as P
+    import platform
 
-    from .providers import PROVIDER_HOMES, PROVIDER_NAMES
+    from .providers import PROVIDER_NAMES, provider_store_status
 
-    providers: Dict[str, Any] = {}
-    for name in PROVIDER_NAMES:
-        raw = PROVIDER_HOMES.get(name, "")
-        path = None
-        if raw.startswith("~") or raw.startswith("/"):
-            path = P(os.path.expanduser(raw.split()[0]))
-        exists = bool(path and (path.is_dir() or path.is_file()))
-        count = 0
-        try:
-            count = len(list_sessions(providers=[name], limit=500))
-        except Exception:
-            count = 0
-        providers[name] = {
-            "path": raw if raw else str(path or ""),
-            "exists": exists if path else count > 0,
-            "sessions": count,
-        }
     return {
         "name": APP_NAME,
         "version": __version__,
         "role": "library+cli",
-        "providers": providers,
+        "platform": platform.system().lower(),  # darwin | linux | windows
+        "providers": provider_store_status(),
         "export_formats": list(SUPPORTED_FORMATS),
         "provider_names": list(PROVIDER_NAMES),
         "session_ref": "full uuid | unique prefix | path | title substring",

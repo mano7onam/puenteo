@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import urllib.parse
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Iterable, List, Optional
 
 # CSI / OSC-ish ANSI sequences (colors, bold, etc.)
@@ -25,13 +27,46 @@ def normalize_path(path: Optional[str]) -> str:
         return expand(path)
 
 
+def path_slash(path: Optional[str]) -> str:
+    """Normalize path separators to ``/`` for portable comparisons (Windows-safe)."""
+    if not path:
+        return ""
+    p = str(path).replace("\\", "/").rstrip("/")
+    # collapse duplicate slashes but keep Windows drive ``C:``
+    if len(p) >= 2 and p[1] == ":":
+        drive, rest = p[:2], p[2:]
+        while "//" in rest:
+            rest = rest.replace("//", "/")
+        return drive + rest
+    while "//" in p:
+        p = p.replace("//", "/")
+    return p
+
+
 def paths_related(a: str, b: str) -> bool:
     """True if either path is equal or a parent/child of the other."""
-    a = normalize_path(a).rstrip("/")
-    b = normalize_path(b).rstrip("/")
+    a = path_slash(normalize_path(a))
+    b = path_slash(normalize_path(b))
     if not a or not b:
         return False
+    # case-insensitive on Windows
+    if sys.platform == "win32":
+        a, b = a.lower(), b.lower()
     return a == b or a.startswith(b + "/") or b.startswith(a + "/")
+
+
+def looks_absolute_path(raw: str) -> bool:
+    """True for POSIX abs, ~user, or Windows drive/UNC paths."""
+    if not raw:
+        return False
+    s = raw.strip()
+    if s.startswith("~") or s.startswith("/"):
+        return True
+    if len(s) > 1 and s[1] == ":":  # C:\...
+        return True
+    if s.startswith("\\\\") or s.startswith("//"):  # UNC
+        return True
+    return False
 
 
 def cwd_matches(filter_cwd: Optional[str], session_cwd: Optional[str]) -> bool:
@@ -42,6 +77,8 @@ def cwd_matches(filter_cwd: Optional[str], session_cwd: Optional[str]) -> bool:
     - empty filter → match all
     - absolute/~ path → session cwd equals filter or is under it
     - bare fragment (e.g. ``harbor-datasets``) → substring of session cwd
+
+    Works on macOS, Linux, and Windows (``\\`` and drive letters).
     """
     if not filter_cwd or not str(filter_cwd).strip():
         return True
@@ -49,25 +86,57 @@ def cwd_matches(filter_cwd: Optional[str], session_cwd: Optional[str]) -> bool:
         return False
 
     raw = str(filter_cwd).strip()
-    sess = normalize_path(session_cwd).rstrip("/")
+    sess = path_slash(normalize_path(session_cwd))
     if not sess:
         return False
 
-    looks_abs = (
-        raw.startswith("~")
-        or raw.startswith("/")
-        or (len(raw) > 1 and raw[1] == ":")  # Windows drive
-    )
-    if looks_abs:
-        filt = normalize_path(raw).rstrip("/")
+    if looks_absolute_path(raw):
+        filt = path_slash(normalize_path(raw))
         if not filt:
             return False
-        # session is this project or a subdirectory — not a parent project session
+        if sys.platform == "win32":
+            sess_c, filt_c = sess.lower(), filt.lower()
+            return sess_c == filt_c or sess_c.startswith(filt_c + "/")
         return sess == filt or sess.startswith(filt + "/")
 
     # fragment / basename style
-    frag = raw.lower().rstrip("/")
+    frag = raw.replace("\\", "/").lower().rstrip("/")
     return frag in sess.lower()
+
+
+def platform_app_support_dirs(*app_names: str) -> List[Path]:
+    """
+    Candidate application data roots for Electron/VS Code–style apps.
+
+    macOS:  ~/Library/Application Support/<name>
+    Windows: %APPDATA%/<name>  and  %LOCALAPPDATA%/<name>
+    Linux:  ~/.config/<name>  and  $XDG_CONFIG_HOME/<name>
+    """
+    home = Path.home()
+    out: List[Path] = []
+    for name in app_names:
+        if not name:
+            continue
+        if sys.platform == "darwin":
+            out.append(home / "Library" / "Application Support" / name)
+        elif sys.platform == "win32":
+            appdata = os.environ.get("APPDATA") or str(home / "AppData" / "Roaming")
+            local = os.environ.get("LOCALAPPDATA") or str(home / "AppData" / "Local")
+            out.append(Path(appdata) / name)
+            out.append(Path(local) / name)
+        else:
+            xdg = os.environ.get("XDG_CONFIG_HOME") or str(home / ".config")
+            out.append(Path(xdg) / name)
+            out.append(home / ".config" / name)
+    # dedupe preserving order
+    seen = set()
+    uniq: List[Path] = []
+    for p in out:
+        key = str(p)
+        if key not in seen:
+            seen.add(key)
+            uniq.append(p)
+    return uniq
 
 
 def strip_ansi(text: Optional[str]) -> str:

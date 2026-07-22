@@ -495,27 +495,11 @@ def cmd_export(args, *, providers, cwd) -> int:
 
 def cmd_status(*, json_mode: bool = False) -> int:
     import json
-    from pathlib import Path
 
     from .exporters import SUPPORTED_FORMATS
-    from .providers import PROVIDER_HOMES, PROVIDER_NAMES
+    from .providers import provider_store_status
 
-    info = {}
-    for name in PROVIDER_NAMES:
-        raw = PROVIDER_HOMES.get(name, "")
-        # only path-like homes for exists check
-        path = Path(os.path.expanduser(raw.split()[0])) if raw.startswith("~") or raw.startswith("/") else None
-        exists = bool(path and (path.is_dir() or path.is_file()))
-        count = 0
-        try:
-            count = len(list_sessions(providers=[name], limit=500))
-        except Exception:
-            count = 0
-        info[name] = {
-            "path": raw,
-            "exists": exists if path else count > 0,
-            "sessions": count,
-        }
+    info = provider_store_status()
 
     if json_mode:
         print(

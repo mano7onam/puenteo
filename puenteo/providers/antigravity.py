@@ -23,7 +23,15 @@ USER_REQ_RE = re.compile(
     r"<USER_REQUEST>\s*(.*?)\s*</USER_REQUEST>",
     re.S | re.I,
 )
-PATH_RE = re.compile(r"(?:file://)?(/Users/[^\s\"'<>\x00-\x1f]{3,200}|/[a-zA-Z0-9._/-]{4,200})")
+# Absolute paths: POSIX (/Users, /home, /opt…) and Windows (C:\… or C:/…)
+PATH_RE = re.compile(
+    r"(?:file:///)?"
+    r"("
+    r"(?:/Users|/home|/opt|/var|/tmp)/[^\s\"'<>\x00-\x1f]{2,200}"
+    r"|/[a-zA-Z0-9._/-]{4,200}"
+    r"|[A-Za-z]:[\\/][^\s\"'<>\x00-\x1f]{2,200}"
+    r")"
+)
 
 
 def _roots() -> List[Path]:
@@ -311,12 +319,16 @@ def _first_project_path(text: str) -> str:
         return ""
     candidates: List[str] = []
     for m in PATH_RE.finditer(text):
-        cand = _clean_path(m.group(1))
-        if not (cand.startswith("/Users/") or cand.startswith("/home/") or cand.startswith("/opt/")):
+        cand = _clean_path(m.group(1).replace("\\", "/"))
+        # Windows drive or POSIX home/project roots
+        is_win = len(cand) >= 2 and cand[1] == ":"
+        is_posix_home = cand.startswith(("/Users/", "/home/", "/opt/", "/var/"))
+        if not (is_win or is_posix_home or cand.startswith("/")):
             continue
         if _is_junk_cwd(cand):
             continue
-        if cand.count("/") < 3:
+        seps = cand.count("/") + cand.count("\\")
+        if seps < 2:
             continue
         # prefer directory that exists
         if os.path.isdir(cand):
@@ -329,12 +341,13 @@ def _first_project_path(text: str) -> str:
         return ""
     # score: prefer shorter project roots under dev/Documents/projects
     def score(p: str) -> tuple:
+        pl = p.replace("\\", "/").lower()
         pref = 0
-        if "/dev/" in p or p.rstrip("/").endswith("/dev"):
+        if "/dev/" in pl or pl.rstrip("/").endswith("/dev"):
             pref += 2
-        if "/Documents/" in p or "/projects/" in p or "/PycharmProjects/" in p:
+        if any(x in pl for x in ("/documents/", "/projects/", "/pycharmprojects/", "/repos/", "/code/")):
             pref += 1
-        return (pref, -p.count("/"), len(p))
+        return (pref, -pl.count("/"), len(pl))
 
     candidates.sort(key=score, reverse=True)
     return candidates[0]

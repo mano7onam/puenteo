@@ -6,7 +6,7 @@ Python **library + CLI** to discover, search, and export local sessions from Cla
 
 *Puenteo* ← Spanish *puente* (bridge) + *puentear* (to bridge / jump across).
 
-Zero runtime dependencies · Python ≥ 3.9
+Zero runtime dependencies · Python ≥ 3.9 · **macOS · Linux · Windows**
 
 [![PyPI](https://img.shields.io/pypi/v/puenteo.svg)](https://pypi.org/project/puenteo/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -114,11 +114,13 @@ puenteo pull <id> --around 500
 | **Antigravity** | `~/.gemini/antigravity/brain/*/…/transcript*.jsonl` |
 | Qwen Code | `~/.qwen/projects/**/chats/*` |
 | Gemini CLI | `~/.gemini` (non-antigravity chat dumps) |
-| Cursor | `~/Library/Application Support/Cursor/**/state.vscdb` |
+| Cursor | macOS `~/Library/Application Support/Cursor` · Linux `~/.config/Cursor` · Windows `%APPDATA%\Cursor` |
 | Continue | `~/.continue/sessions/**` |
 | Aider | `.aider.chat.history.md` (scan with `--cwd` or `PUENTEO_AIDER_ROOTS`) |
 | OpenHands | `~/.openhands/openhands.db` |
-| Goose | `~/.config/goose/**` |
+| Goose | Linux/macOS `~/.config/goose` · Windows `%APPDATA%\goose` |
+
+Agent home dirs (`~/.claude`, `~/.codex`, `~/.pi`, …) are the same layout on all platforms; only a few Electron apps (Cursor) use OS-specific app-data paths.
 
 ```bash
 asb list --provider antigravity,claude -n 20

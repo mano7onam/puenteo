@@ -258,7 +258,7 @@ def resolve_session(
     return None
 
 
-# Known on-disk roots for status / doctor
+# Known on-disk roots for status / doctor (portable; Cursor expands per-OS)
 PROVIDER_HOMES = {
     "claude_code": "~/.claude/projects",
     "codex": "~/.codex/sessions",
@@ -267,9 +267,68 @@ PROVIDER_HOMES = {
     "antigravity": "~/.gemini/antigravity/brain",
     "qwen": "~/.qwen/projects",
     "gemini": "~/.gemini",
-    "cursor": "~/Library/Application Support/Cursor",
+    "cursor": "Cursor app data (macOS Application Support / Windows %APPDATA% / Linux ~/.config)",
     "continue": "~/.continue",
     "aider": "project/.aider.chat.history.md (scan with --cwd or PUENTEO_AIDER_ROOTS)",
     "openhands": "~/.openhands/openhands.db",
-    "goose": "~/.config/goose",
+    "goose": "~/.config/goose  (or %APPDATA%/goose on Windows)",
 }
+
+
+def cursor_home_display() -> str:
+    """Human-readable Cursor store path for the current OS."""
+    from ..util import platform_app_support_dirs
+
+    roots = platform_app_support_dirs("Cursor")
+    return str(roots[0]) if roots else "~/.cursor"
+
+
+def provider_store_status() -> dict:
+    """
+    Per-provider store path + exists flag + session count for ``status`` CLI/API.
+    Paths expand correctly on macOS, Linux, and Windows.
+    """
+    import os
+    import sys
+    from pathlib import Path
+
+    from ..util import platform_app_support_dirs
+
+    info = {}
+    for name in PROVIDER_NAMES:
+        raw = PROVIDER_HOMES.get(name, "")
+        path_str = raw
+        exists = False
+
+        if name == "cursor":
+            path_str = cursor_home_display()
+            exists = any(p.exists() for p in platform_app_support_dirs("Cursor", "Cursor Nightly"))
+            if not exists:
+                exists = (Path.home() / ".cursor").exists()
+        elif name == "goose":
+            if sys.platform == "win32":
+                appdata = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+                path_str = str(Path(appdata) / "goose")
+                exists = Path(path_str).is_dir() or (Path.home() / ".goose").is_dir()
+            else:
+                p = Path(os.path.expanduser("~/.config/goose"))
+                path_str = str(p)
+                exists = p.is_dir() or Path(os.path.expanduser("~/.goose")).is_dir()
+        else:
+            token = raw.split()[0] if raw else ""
+            if token.startswith("~") or token.startswith("/") or (
+                len(token) > 1 and token[1] == ":"
+            ):
+                p = Path(os.path.expanduser(token))
+                path_str = str(p)
+                exists = p.is_dir() or p.is_file()
+
+        count = 0
+        try:
+            count = len(list_sessions(providers=[name], limit=500))
+        except Exception:
+            count = 0
+        if not exists and count > 0:
+            exists = True
+        info[name] = {"path": path_str, "exists": exists, "sessions": count}
+    return info

@@ -94,7 +94,7 @@ asb show <id> --last 40
 | `antigravity` / `agy` | `~/.gemini/antigravity/brain/` |
 | `qwen` | `~/.qwen/projects/` |
 | `gemini` | `~/.gemini` (CLI chats) |
-| `cursor` | Cursor Application Support DBs |
+| `cursor` | Cursor app data (macOS / Linux `~/.config` / Windows `%APPDATA%`) |
 | `continue` | `~/.continue/` |
 | `aider` | `.aider.chat.history.md` (needs `--cwd` or `PUENTEO_AIDER_ROOTS`) |
 | `openhands` | `~/.openhands/openhands.db` |
