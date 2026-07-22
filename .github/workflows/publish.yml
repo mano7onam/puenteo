@@ -1,7 +1,7 @@
 name: Publish to PyPI
 
-# Requires repo secret: PYPI_API_TOKEN (pypi-… from pypi.org)
-# environment: pypi → shows under GitHub Deployments (green when success)
+# Token-only publish (no Trusted Publishing / OIDC).
+# Requires repository secret: PYPI_API_TOKEN
 on:
   release:
     types: [published]
@@ -10,6 +10,7 @@ on:
 permissions:
   contents: read
   deployments: write
+  # NOTE: do NOT set id-token: write — avoids accidental OIDC Trusted Publishing.
 
 jobs:
   publish:
@@ -29,8 +30,20 @@ jobs:
           python -m pip install -U pip build
           python -m build
 
+      - name: Require PyPI token secret
+        env:
+          TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::PYPI_API_TOKEN secret is empty. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "PYPI_API_TOKEN is set (length ${#TOKEN})"
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: true
+          verbose: true
