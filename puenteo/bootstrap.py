@@ -55,19 +55,20 @@ def discover_roots() -> List[Path]:
 
 
 def which_puenteo() -> Optional[str]:
-    """Path to ``puenteo`` CLI if available (PATH or local venv)."""
-    for name in ("puenteo", "pto"):
+    """Path to ``puenteo`` / ``asb`` CLI if available (PATH or local venv)."""
+    for name in ("puenteo", "asb", "pto"):
         found = shutil.which(name)
         if found:
             return found
     for root in discover_roots():
-        for rel in (".venv/bin/puenteo", ".venv/bin/pto", "puenteo"):
+        for rel in (".venv/bin/puenteo", ".venv/bin/asb", ".venv/bin/pto", "puenteo", "asb"):
             cand = root / rel
             if cand.is_file() and os.access(cand, os.X_OK):
                 return str(cand)
-    local = Path.home() / ".local" / "bin" / "puenteo"
-    if local.is_file() and os.access(local, os.X_OK):
-        return str(local)
+    for name in ("puenteo", "asb", "pto"):
+        local = Path.home() / ".local" / "bin" / name
+        if local.is_file() and os.access(local, os.X_OK):
+            return str(local)
     return None
 
 
@@ -82,10 +83,11 @@ def puenteo_cli_hint() -> dict:
     return {
         "package": "puenteo",
         "cli": "puenteo",
+        "cli_aliases": ["puenteo", "asb", "pto"],
         "path": root,
         "binary": which_puenteo(),
         "docs": (
-            "Use `puenteo list|search|pull|export` for cross-agent context. "
+            "Use `puenteo` or `asb` for list|search|pull|export. "
             "Terminal Dashboard uses the same library for chat export."
         ),
         "github": "https://github.com/mano7onam/puenteo",

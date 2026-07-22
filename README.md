@@ -52,20 +52,28 @@ data, media_type, filename = puenteo.export_bytes("019f7a24", fmt="html")
 
 ## CLI
 
-```bash
-puenteo status
-puenteo list -n 20 --json
-puenteo list --provider claude,grok --cwd ~/dev/myapp
-puenteo show <id> --last 40
-puenteo search "topic" --json
-puenteo pull <id> --query "topic" --mode query --max-chars 8000
-puenteo export <id> -f md -o chat.md
-puenteo export <id> -f pdf -o chat.pdf
-puenteo export <id> -f html|json|zip|csv|xml|yaml -o …
-puenteo export <id> -f all -o ./out/
-```
+After `pip install puenteo` three commands point to the same CLI:
 
-Short alias after install: `pto` (same as `puenteo`).
+| Command | Notes |
+|---------|--------|
+| **`puenteo`** | main name |
+| **`asb`** | short alias (Agent Session Bridge vibe) |
+| **`pto`** | ultra-short |
+
+```bash
+puenteo status          # same as:
+asb status
+pto status
+
+puenteo list -n 20 --json
+asb list --provider claude,grok --cwd ~/dev/myapp
+asb show <id> --last 40
+asb search "topic" --json
+asb pull <id> --query "topic" --mode query --max-chars 8000
+asb export <id> -f md -o chat.md
+puenteo export <id> -f pdf -o chat.pdf
+asb export <id> -f all -o ./out/
+```
 
 `<id>` = full uuid, **prefix**, path, or unique title substring.
 

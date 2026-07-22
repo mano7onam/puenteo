@@ -39,7 +39,9 @@ def format_session_list(sessions: List[Session], *, json_mode: bool = False) -> 
     for s in sessions:
         lines.append(session_row(s))
     lines.append("")
-    lines.append(f"{len(sessions)} session(s). Use: puenteo show <id>  |  puenteo pull <id> --query '…'")
+    lines.append(
+        f"{len(sessions)} session(s). Use: asb show <id>  |  asb pull <id> --query '…'  (or puenteo …)"
+    )
     return "\n".join(lines)
 
 
@@ -153,7 +155,7 @@ def format_hits(hits: List[Hit], *, json_mode: bool = False) -> str:
         lines.append(f"  cwd:   {h.session.cwd or '—'}")
         lines.append(f"  {h.snippet}")
         lines.append("")
-    lines.append("Pull one: puenteo pull <session_id> --query '…' --mode query")
+    lines.append("Pull one: asb pull <session_id> --query '…' --mode query  (or puenteo pull …)")
     return "\n".join(lines)
 
 

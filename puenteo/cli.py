@@ -357,10 +357,10 @@ def cmd_status(*, json_mode: bool = False) -> int:
         print("Export formats:", ", ".join(SUPPORTED_FORMATS))
         print()
         print("Commands:")
-        print("  puenteo list --json")
-        print("  puenteo search 'topic' --json")
-        print("  puenteo pull <id> --query 'topic' --mode query")
-        print("  puenteo export <id> -f md|html|pdf|json|zip|csv|xml|yaml|all -o out")
+        print("  puenteo list --json     # same as: asb list --json")
+        print("  asb search 'topic' --json")
+        print("  asb pull <id> --query 'topic' --mode query")
+        print("  asb export <id> -f md|html|pdf|json|zip|csv|xml|yaml|all -o out")
     return 0
 
 

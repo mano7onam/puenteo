@@ -15,12 +15,13 @@ argument-hint: "[list | search <query> | pull <session_id> --query … | export 
 
 # Puenteo skill
 
-You have **`puenteo`** — a local library + CLI that reads **on-disk** transcripts from other agents. Prefer it over guessing what another session did.
+You have **`puenteo`** (aliases **`asb`**, **`pto`**) — a local library + CLI that reads **on-disk** transcripts from other agents. Prefer it over guessing what another session did. `puenteo` and `asb` are the same binary.
 
 ## Preconditions
 
 ```bash
 puenteo status
+# or: asb status
 # or: python3 -m puenteo status
 ```
 
@@ -37,32 +38,32 @@ pip install -e /path/to/puenteo
 ### 1. List sessions
 
 ```bash
-puenteo list --json
+asb list --json
 puenteo list --provider claude --cwd "$PWD"
-puenteo list -n 20
+asb list -n 20
 ```
 
 ### 2. Search by topic
 
 ```bash
-puenteo search "gatekeeper dmg" --json
-puenteo search "export markdown" --session <id>
+asb search "gatekeeper dmg" --json
+asb search "export markdown" --session <id>
 ```
 
 ### 3. Pull compact pack or full export
 
 ```bash
-puenteo pull <id> --query "topic" --mode query --max-chars 8000
-puenteo pull <id> --mode handoff --max-chars 10000
-puenteo export <id> -f md -o /tmp/ctx.md
+asb pull <id> --query "topic" --mode query --max-chars 8000
+asb pull <id> --mode handoff --max-chars 10000
+asb export <id> -f md -o /tmp/ctx.md
 puenteo export <id> -f pdf -o /tmp/ctx.pdf
-puenteo export <id> -f all -o /tmp/puenteo-export/
+asb export <id> -f all -o /tmp/puenteo-export/
 ```
 
 ### 4. Full transcript only if needed
 
 ```bash
-puenteo show <id> --last 40
+asb show <id> --last 40
 ```
 
 ## Rules
@@ -86,8 +87,8 @@ puenteo show <id> --last 40
 ## Recipe
 
 ```text
-1) puenteo list --json
-2) puenteo search "<topic>" --json
-3) puenteo pull <best_id> --query "<topic>" --mode query --max-chars 8000
+1) asb list --json          # or: puenteo list --json
+2) asb search "<topic>" --json
+3) asb pull <best_id> --query "<topic>" --mode query --max-chars 8000
 4) Apply only verified facts to the current repo.
 ```
