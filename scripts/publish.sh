@@ -5,7 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-if [[ -z "${PYPI_TOKEN:-}" ]]; then
+TOKEN="${PYPI_TOKEN:-${TWINE_PASSWORD:-}}"
+if [[ -z "$TOKEN" ]]; then
   echo "Set PYPI_TOKEN first:"
   echo "  export PYPI_TOKEN=pypi-…"
   echo "  # create at https://pypi.org/manage/account/token/"
@@ -15,5 +16,5 @@ fi
 python3 -m pip install -U build twine
 rm -rf dist build *.egg-info
 python3 -m build
-TWINE_USERNAME=__token__ TWINE_PASSWORD="$PYPI_TOKEN" python3 -m twine upload dist/*
-echo "Published. Test: pip install -U puenteo && puenteo --version"
+TWINE_USERNAME=__token__ TWINE_PASSWORD="$TOKEN" python3 -m twine upload --skip-existing dist/*
+echo "Published. Test: pip install -U puenteo && puenteo --version && asb --version"
