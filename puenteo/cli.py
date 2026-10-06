@@ -281,6 +281,11 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--hooks", action="store_true", help="Also install message-delivery hooks (Claude Code, Codex)")
         sp.add_argument("--dry-run", "-n", action="store_true", help="Show the plan, change nothing")
 
+    sp = sub.add_parser("serve", help="Local HTTP gateway: dashboard, REST, SSE, MCP over HTTP, A2A (127.0.0.1 only)")
+    sp.add_argument("--port", type=int, default=7357)
+    sp.add_argument("--open", action="store_true", help="Open the dashboard in a browser")
+    sp.add_argument("--print-token", action="store_true", help="Print the bearer token and exit")
+
     sp = sub.add_parser("mcp", help="Run the puenteo MCP server on stdio (agents start this)")
     sp.add_argument("mcp_args", nargs=argparse.REMAINDER)
 
@@ -357,6 +362,14 @@ def _main(args, parser, providers) -> int:
             from .mcp import main as mcp_main
 
             return mcp_main(args.mcp_args)
+
+        if args.cmd == "serve":
+            from . import server
+
+            if args.print_token:
+                print(server.load_token())
+                return 0
+            return server.serve(port=args.port, open_browser=args.open)
 
         from .cli_bus import BUS_COMMANDS
 
