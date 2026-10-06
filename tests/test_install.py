@@ -93,9 +93,23 @@ def test_plugin_skills_in_sync():
 
     from puenteo.install import SKILLS, skills_source
 
-    root = pathlib.Path(__file__).resolve().parents[1] / "plugin" / "skills"
-    if not root.exists():
-        pytest.skip("not a source checkout")
-    for name in SKILLS:
-        assert (root / name / "SKILL.md").read_text() == (skills_source() / name / "SKILL.md").read_text(), (
-            "run: cp -R puenteo/data/skills/. plugin/skills/")
+    repo = pathlib.Path(__file__).resolve().parents[1]
+    for root in (repo / "plugin" / "skills", repo / "skills"):
+        if not root.exists():
+            pytest.skip("not a source checkout")
+        for name in SKILLS:
+            assert (root / name / "SKILL.md").read_text() == (skills_source() / name / "SKILL.md").read_text(), (
+                f"run: cp -R puenteo/data/skills/. {root.relative_to(repo)}/")
+
+
+def test_manifest_versions_match():
+    import json
+    import pathlib
+
+    from puenteo.version import __version__
+
+    repo = pathlib.Path(__file__).resolve().parents[1]
+    for rel in ("plugin/.claude-plugin/plugin.json", "gemini-extension.json"):
+        p = repo / rel
+        if p.exists():
+            assert json.loads(p.read_text())["version"] == __version__, rel

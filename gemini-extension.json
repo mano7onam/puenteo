@@ -1,0 +1,17 @@
+{
+  "name": "puenteo",
+  "version": "0.7.0",
+  "description": "Bridge between coding-agent sessions: search history of every local agent (Claude, Codex, Gemini, Cursor, …) and message sessions running right now.",
+  "mcpServers": {
+    "puenteo": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "puenteo",
+        "puenteo",
+        "mcp"
+      ]
+    }
+  },
+  "contextFileName": "GEMINI.md"
+}
