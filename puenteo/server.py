@@ -356,8 +356,11 @@ def make_handler(gw: Gateway):
                 tail = b.history(limit=1)
                 last = tail[-1].seq if tail else 0
             bell = Bell(addr or ALL)
+
+            idle = 15.0 if bell.sock is not None else 1.0  # no doorbell (Windows): poll fast
             try:
-                self.wfile.write(b": puenteo stream\n\n")
+                # tell the client where the stream starts, so it can tell "connected" from "missed"
+                self.wfile.write(f"event: ready\ndata: {json.dumps({'after': last})}\n\n".encode())
                 self.wfile.flush()
                 while True:
                     if addr:
@@ -370,7 +373,7 @@ def make_handler(gw: Gateway):
                     if not msgs:
                         self.wfile.write(b": ping\n\n")
                     self.wfile.flush()
-                    bell.wait(15.0)
+                    bell.wait(idle)
             except (BrokenPipeError, ConnectionResetError, OSError):
                 pass
             finally:

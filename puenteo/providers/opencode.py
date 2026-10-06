@@ -154,7 +154,7 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
         if created:
             import datetime as _dt
 
-            ts = _dt.datetime.utcfromtimestamp(created / 1000.0).strftime("%Y-%m-%dT%H:%M:%SZ")
+            ts = _dt.datetime.fromtimestamp(created / 1000.0, _dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         messages.append(Message(role=role if role in ("user", "assistant", "system") else "assistant", text=text, timestamp=ts, index=idx))
         idx += 1
     if session.title.startswith("OpenCode ") or not session.title:

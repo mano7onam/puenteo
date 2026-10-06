@@ -90,23 +90,34 @@ def test_a2a_card_and_relay(srv):
 def test_sse_streams_new_messages(srv):
     got = []
 
+    ready = threading.Event()
+
     def listen():
         req = urllib.request.Request(srv + "/api/events?token=tok123")
-        with urllib.request.urlopen(req, timeout=5) as r:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            event = ""
             for raw in r:
                 line = raw.decode().strip()
-                if line.startswith("data: "):
-                    got.append(json.loads(line[6:]))
-                    return
+                if line.startswith("event: "):
+                    event = line[7:]
+                elif line.startswith("data: "):
+                    if event == "ready":
+                        ready.set()
+                    else:
+                        got.append(json.loads(line[6:]))
+                        return
 
     t = threading.Thread(target=listen, daemon=True)
     t.start()
-    time.sleep(0.4)
+    assert ready.wait(5)
     t0 = time.time()
     call(srv + "/api/send", "POST", {"to": "@alice", "text": "streamed"})
-    t.join(5)
+    t.join(8)
     assert got and got[0]["body"] == "streamed"
-    assert time.time() - t0 < 2, "doorbell should wake the SSE stream immediately"
+    from puenteo.notify import SUPPORTED
+
+    if SUPPORTED:
+        assert time.time() - t0 < 2, "doorbell should wake the SSE stream immediately"
 
 
 def test_dashboard_page(srv):
