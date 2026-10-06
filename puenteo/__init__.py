@@ -56,6 +56,12 @@ from .api import (  # noqa: F401
     search_transcript,
     smart_pull,
     status,
+    ps,
+    whoami,
+    send,
+    inbox,
+    reply,
+    handoff,
 )
 from .version import __version__
 
@@ -91,4 +97,10 @@ __all__ = [
     "search_transcript",
     "smart_pull",
     "status",
+    "ps",
+    "whoami",
+    "send",
+    "inbox",
+    "reply",
+    "handoff",
 ]

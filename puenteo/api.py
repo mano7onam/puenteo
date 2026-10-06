@@ -316,6 +316,79 @@ def export_bytes(
     )
 
 
+# --------------------------------------------------------------------------- live sessions & bus
+
+
+def ps(*, cwd: Optional[str] = None, agents: Optional[Sequence[str]] = None) -> list:
+    """Agent sessions running right now (any vendor). Same as ``puenteo ps``."""
+    from .live import live_sessions
+
+    return live_sessions(agents=list(agents) if agents else None, cwd=cwd)
+
+
+def whoami():
+    """The agent session this process runs inside (``Me``) or None."""
+    from .live import whoami as _w
+
+    return _w()
+
+
+def _me(sender: Optional[str]) -> str:
+    if sender:
+        return sender
+    me = whoami()
+    if me:
+        return me.address
+    return "user:" + (os.environ.get("USER") or os.environ.get("USERNAME") or "python")
+
+
+def send(to: str, text: str, *, sender: Optional[str] = None, thread: str = "", wait: float = 0, push: bool = True):
+    """
+    Message live sessions: ``to`` = ``agent:id`` | ``@name`` | ``#channel`` | ``agent:codex`` | ``cwd:.`` | ``*``.
+
+    Returns the sent ``BusMessage``; with ``wait`` > 0 returns ``(message, replies)``.
+    """
+    from .bus import Bus
+    from .deliver import push_pending
+
+    me = _me(sender)
+    with Bus() as b:
+        msg = b.send(me, to, text, thread=thread)
+        if push:
+            msg.meta["delivery"] = push_pending(b, msg)
+        if wait:
+            return msg, b.wait(me, timeout=wait, thread=msg.thread)
+        return msg
+
+
+def inbox(*, address: Optional[str] = None, unread_only: bool = True, mark_read: bool = True) -> list:
+    """Messages other sessions sent to ``address`` (default: this session)."""
+    from .bus import Bus
+
+    with Bus() as b:
+        return b.inbox(_me(address), unread_only=unread_only, mark_read=mark_read)
+
+
+def reply(msg_id: str, text: str, *, sender: Optional[str] = None):
+    from .bus import Bus
+    from .deliver import push_pending
+
+    with Bus() as b:
+        msg = b.send(_me(sender), "", text, reply_to=msg_id)
+        msg.meta["delivery"] = push_pending(b, msg)
+        return msg
+
+
+def handoff(ref: Union[str, Session], *, query: Optional[str] = None, max_chars: int = 12000) -> str:
+    """Structured markdown handoff of a session (goal, state, plan, files, commits, problems, tail)."""
+    from .extract import handoff_brief
+
+    sess = ref if isinstance(ref, Session) else get_session(ref)
+    if not sess:
+        raise LookupError(f"Session not found: {ref!r}")
+    return handoff_brief(load_transcript(sess), query=query, max_chars=max_chars)
+
+
 __all__ = [
     "APP_NAME",
     "SUPPORTED_FORMATS",
@@ -348,4 +421,10 @@ __all__ = [
     "search_transcript",
     "smart_pull",
     "status",
+    "ps",
+    "whoami",
+    "send",
+    "inbox",
+    "reply",
+    "handoff",
 ]

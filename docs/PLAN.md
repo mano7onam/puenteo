@@ -1,5 +1,19 @@
 # Puenteo → 1.0: большой план переделки
 
+> **Статус на 2026-10-06 (v0.8.0)** — сделано в сессии `claude:87652461`:
+>
+> | Фаза | Статус |
+> |---|---|
+> | 0. Срочные фиксы | ✅ B1–B4, B5/B6 (дедуп Codex в light+rich), B7, B8, B9, B10, B11, B14, B16; плюс найденный по ходу баг: subagent-треды Codex получали id родителя |
+> | 2. Индекс | ✅ SQLite FTS5 по всем сессиям, инкрементально; `list` 1.9 c → 0.12 c, `search` по 4.5k сессий ≈ 0.25 c; метакэш |
+> | 3. Провайдеры | ◐ OpenCode, Copilot CLI добавлены; Codex — заголовки/никнеймы/родители из `state_*.sqlite`; Cursor/Copilot Chat/Cline — впереди |
+> | 4. Хендовер + безопасность | ◐ структурный handoff из tool calls (файлы, план, коммиты, падения, итог), redaction по умолчанию, untrusted-обёртка сообщений; transplant — нет |
+> | 5. MCP | ✅ `puenteo mcp` (18 tools), проверен в `claude -p` и `codex exec`; `puenteo install`; Claude plugin marketplace; Gemini extension |
+> | 6. Шина | ✅ `ps/whoami/send/inbox/reply/wait/watch/log/thread/channels/claim`; доставка: `codex queue` push, Claude Monitor + `puenteo watch`, хуки Claude/Codex (UserPromptSubmit/Stop проверены вживую) |
+> | CI | ✅ матрица Linux/macOS/Windows × 3.9/3.12/3.13, герметичные тесты на фикстурах |
+>
+> Осталось: Cursor (cursorDiskKV), Copilot Chat VS Code, Cline/Roo/Kilo, Junie, Droid; единая модель вместо light/rich; `tree`/родословная; transplant; PyPI-релиз 0.8.0 (нужен тег + токен).
+
 **Дата:** 2026-10-03 · **База:** v0.6.1 (`1ec7827`) · **Автор:** Claude (ревью всего кода + прогон на реальных данных этой машины)
 
 Цель: из «скрипта, который читает чужие jsonl» сделать **профессиональный мост между агентами**:
