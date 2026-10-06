@@ -89,6 +89,7 @@ def watch(
     jsonl: bool = False,
     mark_read: bool = True,
     out=None,
+    on_message=None,
 ) -> int:
     """
     Stream new messages for ``address`` to stdout, one block per message.
@@ -97,32 +98,38 @@ def watch(
     every printed line becomes a notification that wakes the session.
     Returns the number of messages printed.
     """
+    from .notify import Bell
+
     out = out or sys.stdout
     bus = bus or Bus()
     addr = normalize_address(address)
     n = 0
     deadline = time.time() + timeout if timeout else None
-    while True:
-        try:
-            msgs = bus.inbox(addr, unread_only=True, mark_read=mark_read)
-        except Exception as e:  # locked db etc. — keep watching
-            print(f"puenteo watch: {e}", file=sys.stderr)
-            msgs = []
-        for m in msgs:
-            if jsonl:
-                out.write(_maybe_redact(json.dumps(m.to_dict(), ensure_ascii=False)) + "\n")
-            else:
-                body = _maybe_redact(" ".join(m.body.split()))
-                if len(body) > 600:
-                    body = body[:599] + "…"
-                out.write(f"[puenteo] {m.sender} → {m.to} (id {m.id}): {body}\n")
-            out.flush()
-            n += 1
-        if once and (msgs or (deadline and time.time() >= deadline)):
-            return n
-        if deadline and time.time() >= deadline:
-            return n
-        time.sleep(poll)
+    with Bell(addr) as bell:
+        while True:
+            try:
+                msgs = bus.inbox(addr, unread_only=True, mark_read=mark_read)
+            except Exception as e:  # locked db etc. — keep watching
+                print(f"puenteo watch: {e}", file=sys.stderr)
+                msgs = []
+            for m in msgs:
+                if on_message is not None:
+                    on_message(m)
+                if jsonl:
+                    out.write(_maybe_redact(json.dumps(m.to_dict(), ensure_ascii=False)) + "\n")
+                elif on_message is None:
+                    body = _maybe_redact(" ".join(m.body.split()))
+                    if len(body) > 600:
+                        body = body[:599] + "…"
+                    out.write(f"[puenteo] {m.sender} → {m.to} (id {m.id}): {body}\n")
+                out.flush()
+                n += 1
+            if once and (msgs or (deadline and time.time() >= deadline)):
+                return n
+            if deadline and time.time() >= deadline:
+                return n
+            wait_s = poll if not deadline else max(0.0, min(poll, deadline - time.time()))
+            bell.wait(wait_s)
 
 
 # ----------------------------------------------------------------------------- hooks

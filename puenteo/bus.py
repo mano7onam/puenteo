@@ -519,8 +519,12 @@ class Bus:
         recipients = self.resolve(to, sender=sender)  # may scan processes: keep it outside the write lock
 
         with self._tx():
-            return self._insert(sender, to, body, recipients, thread=thread, reply_to=reply_to,
-                                kind=kind, hops=hops, meta=meta)
+            msg = self._insert(sender, to, body, recipients, thread=thread, reply_to=reply_to,
+                               kind=kind, hops=hops, meta=meta)
+        from .notify import ring
+
+        ring(recipients)  # after COMMIT, so woken readers see the row
+        return msg
 
     def _insert(self, sender, to, body, recipients, *, thread, reply_to, kind, hops, meta) -> BusMessage:
         now = time.time()
@@ -683,19 +687,27 @@ class Bus:
         address: str,
         *,
         timeout: float = 60.0,
-        poll: float = 0.5,
+        poll: float = 2.0,
         thread: Optional[str] = None,
         mark_read: bool = True,
     ) -> List[BusMessage]:
-        """Block until something unread arrives for ``address`` (or timeout → [])."""
+        """Block until something unread arrives for ``address`` (or timeout → []).
+
+        Wakes instantly on a doorbell ring; ``poll`` is only the safety-net interval.
+        """
+        from .notify import Bell
+
+        a = normalize_address(address)
         deadline = time.time() + max(0.0, timeout)
-        while True:
-            msgs = self.inbox(address, unread_only=True, mark_read=mark_read, thread=thread)
-            if msgs:
-                return msgs
-            if time.time() >= deadline:
-                return []
-            time.sleep(poll)
+        with Bell(a) as bell:
+            while True:
+                msgs = self.inbox(a, unread_only=True, mark_read=mark_read, thread=thread)
+                if msgs:
+                    return msgs
+                left = deadline - time.time()
+                if left <= 0:
+                    return []
+                bell.wait(min(poll, left))
 
     # ------------------------------------------------------------------ claims
     def claim(self, holder: str, resource: str, *, ttl_s: int = 1800, note: str = "", force: bool = False) -> Claim:

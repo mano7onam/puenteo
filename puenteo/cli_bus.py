@@ -63,7 +63,7 @@ def add_parsers(sub, common) -> None:
 
     sp = sub.add_parser("watch", help="Stream incoming messages, one line each (for agent monitors)")
     common(sp)
-    sp.add_argument("--interval", type=float, default=1.0)
+    sp.add_argument("--interval", type=float, default=5.0, help="Safety-net poll (delivery is instant via doorbell)")
     sp.add_argument("--timeout", type=float, default=None)
     sp.add_argument("--once", action="store_true", help="Exit after the first batch")
     sp.add_argument("--jsonl", action="store_true")
@@ -348,9 +348,12 @@ def _run(cmd: str, args, *, json_mode: bool, cwd, providers) -> int:
         msgs = bus.history(limit=args.limit, **kw)
         _print_log(msgs, json_mode)
         if args.follow:
+            from .notify import ALL, Bell
+
             last = msgs[-1].seq if msgs else 0
+            bell = Bell(ALL)
             while True:
-                time.sleep(1.0)
+                bell.wait(5.0)
                 new = bus.history(limit=200, after_seq=last, **kw)
                 if new:
                     _print_log(new, json_mode)
