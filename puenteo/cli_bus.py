@@ -374,7 +374,7 @@ def _run(cmd: str, args, *, json_mode: bool, cwd, providers) -> int:
             from .notify import ALL, Bell
 
             last = msgs[-1].seq if msgs else 0
-            bell = Bell(ALL)
+            bell = Bell(ALL, bus.path)
             while True:
                 bell.wait(5.0)
                 new = bus.history(limit=200, after_seq=last, **kw)

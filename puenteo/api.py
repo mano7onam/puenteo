@@ -394,7 +394,7 @@ def listen(*, address: Optional[str] = None, timeout: Optional[float] = None, ma
 
     me = _me(address)
     deadline = _t.time() + timeout if timeout else None
-    with Bus() as b, Bell(me) as bell:
+    with Bus() as b, Bell(me, b.path) as bell:
         while True:
             for m in b.inbox(me, unread_only=True, mark_read=mark_read):
                 yield m

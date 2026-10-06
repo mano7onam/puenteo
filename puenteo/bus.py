@@ -132,6 +132,17 @@ _ADDR_RE = re.compile(r"^[\w.:@#*/~+=-]{1,300}$")
 _CWD_RE = re.compile(r"^cwd:[^\x00-\x1f<>\"]{0,1024}$")
 
 
+MESH_OUTBOX = "mesh:out"
+
+
+def is_remote(addr: str) -> bool:
+    """``x@node`` (session/@name/#room on another machine). Local ``@name`` has no second '@'."""
+    a = addr or ""
+    if a.startswith("@"):
+        return "@" in a[1:]
+    return "@" in a
+
+
 def check_address(addr: str) -> str:
     """Addresses are interpolated into agent context; keep them to a safe charset."""
     if addr and addr.startswith("cwd:") and _CWD_RE.match(addr):
@@ -392,6 +403,13 @@ class Bus:
         me = normalize_address(sender) if sender else ""
         if not to:
             raise BusError("empty recipient")
+        if is_remote(to):
+            # other machine: the mesh bridge picks it up from its outbox (see puenteo.mesh).
+            # A room post (#room@*) also reaches local members of #room.
+            if to.startswith("#"):
+                local_room = to.rsplit("@", 1)[0]
+                return [MESH_OUTBOX] + [a for a in self.members(local_room) if a != me]
+            return [MESH_OUTBOX]
         if to.startswith("#"):
             return [a for a in self.members(to) if a != me]
         if to.startswith("@") and to not in ("@self", "@me"):
@@ -480,8 +498,9 @@ class Bus:
         reply_to: str = "",
         kind: str = "message",
         meta: Optional[Dict[str, Any]] = None,
+        min_hops: int = 0,
     ) -> BusMessage:
-        return self._send(sender, to, body, thread=thread, reply_to=reply_to, kind=kind, meta=meta)
+        return self._send(sender, to, body, thread=thread, reply_to=reply_to, kind=kind, meta=meta, min_hops=min_hops)
 
     def _send(
         self,
@@ -493,6 +512,7 @@ class Bus:
         reply_to: str = "",
         kind: str = "message",
         meta: Optional[Dict[str, Any]] = None,
+        min_hops: int = 0,
     ) -> BusMessage:
         sender = check_address(normalize_address(sender) or "user:cli")
         if to:
@@ -506,12 +526,14 @@ class Bus:
             raise BusError(
                 f"message too long ({len(body)} > {MAX_BODY} chars); send a session ref or file path instead"
             )
-        hops = 0
+        hops = max(0, int(min_hops))  # hop count carried in from another machine (mesh)
+        if hops > MAX_HOPS:
+            raise BusError(f"hop limit reached ({MAX_HOPS}) on a cross-machine thread")
         if reply_to:
             parent = self.get(reply_to)
             if not parent:
                 raise BusError(f"unknown message {reply_to!r}")
-            hops = parent.hops + 1
+            hops = max(hops, parent.hops + 1)
             if hops > MAX_HOPS:
                 raise BusError(f"hop limit reached ({MAX_HOPS}); break the loop or ask the user")
             thread = thread or parent.thread or parent.id
@@ -528,7 +550,7 @@ class Bus:
                                kind=kind, hops=hops, meta=meta)
         from .notify import ring
 
-        ring(recipients)  # after COMMIT, so woken readers see the row
+        ring(recipients, self.path)  # after COMMIT, so woken readers see the row
         return msg
 
     def _insert(self, sender, to, body, recipients, *, thread, reply_to, kind, hops, meta) -> BusMessage:
@@ -662,8 +684,9 @@ class Bus:
         q = "SELECT seq, id, sender, recipient, thread, reply_to, kind, body, created, hops, meta FROM messages WHERE seq>?"
         args: List[Any] = [after_seq]
         if channel:
-            q += " AND recipient=?"
-            args.append("#" + channel.lstrip("#"))
+            ch = "#" + channel.lstrip("#").split("@")[0]
+            q += " AND (recipient=? OR recipient=?)"  # local posts and mesh-room posts (#room@*)
+            args += [ch, ch + "@*"]
         elif address:
             a = normalize_address(address)
             q += " AND (sender=? OR seq IN (SELECT msg_seq FROM deliveries WHERE address=?))"
@@ -704,7 +727,7 @@ class Bus:
 
         a = normalize_address(address)
         deadline = time.time() + max(0.0, timeout)
-        with Bell(a) as bell:
+        with Bell(a, self.path) as bell:
             while True:
                 msgs = self.inbox(a, unread_only=True, mark_read=mark_read, thread=thread)
                 if msgs:

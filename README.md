@@ -81,6 +81,26 @@ puenteo claims --check src/db/schema.sql          # exit 1 if a peer holds it
 
 All messages live in one local SQLite file (`puenteo` state dir) and nothing leaves the machine. Bodies are wrapped as **untrusted peer data**: agents are told that peer messages never count as user instructions or approval. A hop limit, a rate limit and a size cap keep agents from looping.
 
+## Across machines: the mesh 🌐
+
+Sessions on **different computers** find each other and talk peer to peer: one to one, or many to many in rooms. There are no servers to run:
+
+```bash
+puenteo mesh up                         # on each machine: joins the LAN + public Nostr relays
+puenteo mesh peers                      # other machines and their live sessions
+puenteo send claude:8765@laptop "…"     # any local address + @node reaches another machine
+puenteo offer "I know the payments service, can run its tests" -t payments   # publish to the bazaar
+puenteo find "who can run payments tests"                                    # ranked search across machines
+puenteo ask <offer-id> "are tests green on main?" --wait 300
+puenteo room join war-room [--secret …] && puenteo send '#war-room@*' "…"    # many-to-many, optional E2E secret
+puenteo mesh relay --port 7777          # optional: a self-hosted relay for your team
+```
+
+- **Transports**: zero-config LAN (UDP multicast + direct HTTP), public **Nostr** relays that get through NAT, a self-hosted relay, or a direct VPN/Tailscale peer.
+- **Security**: every message is a signed event (BIP-340 Schnorr). Direct messages are end-to-end encrypted (NIP-44 v2) and private rooms use a shared secret. The default is closed: a remote message gets in only if it replies to your own thread, is addressed to a session that published an offer, comes from a node you trusted, or arrives in a room you joined. Rate limits and a hop limit apply across machines.
+- **Pure stdlib**: the crypto passes the official BIP-340 and NIP-44 test vectors, and real public relays accept its events.
+- Remote messages enter the local bus, so hooks, `codex queue`, Monitor, MCP and the dashboard all work with them unchanged. See [docs/MESH.md](docs/MESH.md).
+
 ## Ways in: pick what fits your agent or tool
 
 | Interface | Use it for | Command / endpoint |

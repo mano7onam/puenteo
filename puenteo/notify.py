@@ -27,16 +27,18 @@ SUPPORTED = hasattr(socket, "AF_UNIX") and sys.platform != "win32"
 ALL = "*"
 
 
-def _bell_dir() -> Path:
-    from .paths import state_dir
+def _bell_dir(scope: str = "") -> Path:
+    """Bells live next to the bus they belong to (``scope`` = bus db path; default: the current bus)."""
+    from .paths import bus_db_path, state_dir
 
-    d = state_dir() / "bell"
+    scope = scope or str(bus_db_path())
+    tag = hashlib.sha1(scope.encode(), usedforsecurity=False).hexdigest()[:10]
+    d = state_dir() / "bell" / tag
     # AF_UNIX paths are limited to ~104 bytes on macOS; fall back to a short tmp dir.
     if len(str(d)) > 80:
         uid = os.getuid() if hasattr(os, "getuid") else 0
         # per-uid dir, chmod 0700 below; only used when the state dir path is too long for AF_UNIX
         base = tempfile.gettempdir() if len(tempfile.gettempdir()) < 40 else "/tmp"  # nosec B108
-        tag = hashlib.sha1(str(state_dir()).encode(), usedforsecurity=False).hexdigest()[:8]
         d = Path(base) / f"puenteo-{uid}" / tag
     d.mkdir(parents=True, exist_ok=True)
     try:
@@ -53,14 +55,14 @@ def _name(address: str) -> str:
 class Bell:
     """A listener's doorbell. Use as a context manager; ``wait(timeout)`` → rang?"""
 
-    def __init__(self, address: str):
+    def __init__(self, address: str, scope: str = ""):
         self.address = address
         self.sock: Optional[socket.socket] = None
         self.path: Optional[Path] = None
         if not SUPPORTED:
             return
         try:
-            d = _bell_dir() / _name(address)
+            d = _bell_dir(scope) / _name(address)
             d.mkdir(exist_ok=True)
             self.path = d / f"{os.getpid()}-{id(self) & 0xFFFF:x}.sock"
             if self.path.exists():
@@ -113,12 +115,12 @@ class Bell:
         self.close()
 
 
-def ring(addresses: Iterable[str]) -> int:
+def ring(addresses: Iterable[str], scope: str = "") -> int:
     """Wake every listener of ``addresses`` (and of ``*``). Returns sockets rung."""
     if not SUPPORTED:
         return 0
     try:
-        base = _bell_dir()
+        base = _bell_dir(scope)
     except OSError:
         return 0
     n = 0
@@ -144,8 +146,8 @@ def ring(addresses: Iterable[str]) -> int:
     return n
 
 
-def listeners(address: str) -> List[str]:
+def listeners(address: str, scope: str = "") -> List[str]:
     if not SUPPORTED:
         return []
-    d = _bell_dir() / _name(address)
+    d = _bell_dir(scope) / _name(address)
     return [str(p) for p in d.glob("*.sock")] if d.is_dir() else []

@@ -355,7 +355,7 @@ def make_handler(gw: Gateway):
             if not last:
                 tail = b.history(limit=1)
                 last = tail[-1].seq if tail else 0
-            bell = Bell(addr or ALL)
+            bell = Bell(addr or ALL, b.path)
 
             idle = 15.0 if bell.sock is not None else 1.0  # no doorbell (Windows): poll fast
             try:

@@ -265,9 +265,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--stats", action="store_true", help="Show index size and counts")
     sp.add_argument("--clear", action="store_true", help="Drop the index and metadata cache")
 
-    from .cli_bus import add_parsers as add_bus_parsers
+    from .cli_bus import _as_flag, add_parsers as add_bus_parsers
+    from .mesh.cli import add_parsers as add_mesh_parsers
 
     add_bus_parsers(sub, _common_flags)
+    add_mesh_parsers(sub, _common_flags, _as_flag)
 
     for name, hlp in (
         ("install", "Install skills + MCP server (+ --hooks) into every detected agent"),
@@ -405,6 +407,13 @@ def _main(args, parser, providers) -> int:
                 print(server.load_token())
                 return 0
             return server.serve(port=args.port, open_browser=args.open)
+
+        from .mesh.cli import MESH_COMMANDS
+
+        if args.cmd in MESH_COMMANDS:
+            from .mesh.cli import run as run_mesh
+
+            return run_mesh(args, json_mode=json_mode)
 
         from .cli_bus import BUS_COMMANDS
 

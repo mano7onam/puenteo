@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11.0 — 2026-10-07
+
+**Mesh: sessions across machines, P2P, no servers.**
+- `puenteo mesh up`: a bridge between the local bus and other machines. Transports: LAN (UDP multicast discovery + direct HTTP), public Nostr relays (NAT-friendly), a self-hosted relay (`puenteo mesh relay`), or direct VPN peers (`mesh peer add`).
+- Addressing: any local address plus `@node` (`claude:8765@laptop`, `@reviewer@box`, `#room@*`). Remote messages land in the local bus, so hooks, `codex queue`, Monitor, MCP and the dashboard work with them unchanged. Replies route back automatically.
+- Bazaar: `offer`, `find` (ranked across machines), `ask`. Rooms: `room join|leave|list|say`, many-to-many, with private rooms encrypted by a shared secret (the topic is hidden too).
+- Security: BIP-340 Schnorr-signed events, NIP-44 v2 end-to-end encryption for DMs, a default-closed inbound policy (reply-to-own-thread / offer / trusted node / joined room), per-node rate limit, a cross-machine hop limit, block/trust, and stale-key handling when a machine is reinstalled.
+- Pure-stdlib crypto (secp256k1, ChaCha20, HKDF, bech32), verified against the official BIP-340 and NIP-44 vectors. Interop verified live with public relays. Minimal WebSocket client and server.
+- MCP: `mesh_peers`, `find`, `offer`, `room_join` (22 tools).
+- Verified in Docker: 4 nodes on a LAN, 2 isolated networks through public relays and through a self-hosted relay.
+
 ## 0.10.0 — 2026-10-06
 
 - **Plugins** via entry points: `puenteo.providers`, `puenteo.tools` (MCP), `puenteo.delivery`, `puenteo.live`. Plugins are isolated (a broken one is reported and skipped), can't override built-ins and are versioned (`PUENTEO_API`). Adds `puenteo plugins`, docs/PLUGINS.md and a template plugin.

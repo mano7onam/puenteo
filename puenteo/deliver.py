@@ -107,7 +107,7 @@ def watch(
     addr = normalize_address(address)
     n = 0
     deadline = time.time() + timeout if timeout else None
-    with Bell(addr) as bell:
+    with Bell(addr, bus.path) as bell:
         while True:
             try:
                 msgs = bus.inbox(addr, unread_only=True, mark_read=mark_read)
