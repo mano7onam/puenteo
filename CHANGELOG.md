@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1 — 2026-10-06
+
+- MCP server re-detects its session lazily and moves a provisional inbox to the real address. Before this, Codex threads that had just started could not receive replies. Verified live with a Claude ↔ Codex ↔ Claude test.
+
 ## 0.9.0 — 2026-10-06
 
 - **Instant delivery**: Unix-socket doorbells replace polling in send/wait/watch/log/SSE (0.8 ms median).

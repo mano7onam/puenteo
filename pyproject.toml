@@ -4,14 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "puenteo"
-version = "0.9.0"
-description = "Puenteo — the bridge between coding agents. List, search, and export Claude/Codex/Grok/Pi/Antigravity/Qwen/Cursor/Continue/Aider/OpenHands/Goose sessions (Python library + CLI)."
+version = "0.9.1"
+description = "Let your coding agents talk to each other: search every Claude Code / Codex / Gemini / Cursor session, message live sessions, claim files — CLI, MCP, hooks, HTTP/SSE, A2A."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "mano", email = "andrey.matveev.mano@gmail.com" }]
 keywords = [
   "agents",
+  "multi-agent",
+  "mcp",
+  "a2a",
+  "agent-communication",
+  "claude-code",
+  "codex",
+  "gemini-cli",
+  "cursor",
+  "handoff",
   "bridge",
   "puente",
   "claude-code",
@@ -27,6 +36,7 @@ keywords = [
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
@@ -49,7 +59,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=7", "build", "twine"]
 # Rust accelerator (prebuilt abi3 wheels); puenteo is fully functional without it
-fast = ["puenteo-core>=0.9"]
+fast = ["puenteo-core>=0.9.1"]
 
 [project.urls]
 Homepage = "https://github.com/mano7onam/puenteo"

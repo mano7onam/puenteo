@@ -12,10 +12,12 @@ VER=$(python3 -c "import re;print(re.search(r'__version__ = \"(.+?)\"', open('$R
 python3 - "$VER" "$ROOT" <<'PY'
 import json, sys, pathlib
 ver, root = sys.argv[1], pathlib.Path(sys.argv[2])
-for rel in ("plugin/.claude-plugin/plugin.json", "gemini-extension.json"):
+for rel in ("plugin/.claude-plugin/plugin.json", "gemini-extension.json", "server.json"):
     p = root / rel
     d = json.loads(p.read_text())
     d["version"] = ver
+    for pkg in d.get("packages", []):
+        pkg["version"] = ver
     p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
 PY
 echo "skills synced, manifests at $VER"

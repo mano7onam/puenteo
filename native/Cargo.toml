@@ -1,6 +1,6 @@
 [package]
 name = "puenteo-core"
-version = "0.9.0"
+version = "0.9.1"
 edition = "2021"
 description = "Native accelerator for puenteo: fast agent-transcript extraction"
 license = "MIT"

@@ -1,5 +1,7 @@
 # puenteo
 
+<!-- mcp-name: io.github.mano7onam/puenteo -->
+
 **The bridge between coding agents.**
 
 Your machine runs many agent sessions: Claude Code in three terminals, Codex in the desktop app, Gemini in an IDE, and more. Each keeps its own history, and none of them know about the others. **puenteo** connects them:
