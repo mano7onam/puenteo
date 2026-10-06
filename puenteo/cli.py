@@ -242,6 +242,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--stats", action="store_true", help="Show index size and counts")
     sp.add_argument("--clear", action="store_true", help="Drop the index and metadata cache")
 
+    from .cli_bus import add_parsers as add_bus_parsers
+
+    add_bus_parsers(sub, _common_flags)
+
     sp = sub.add_parser("status", help="Show what providers/session stores were found")
     _common_flags(sp)
     sp = sub.add_parser("doctor", help="Alias for status")
@@ -285,6 +289,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                 )
             )
             return 0
+
+        from .cli_bus import BUS_COMMANDS
+
+        if args.cmd in BUS_COMMANDS:
+            from .cli_bus import run as run_bus
+
+            return run_bus(args, json_mode=json_mode, cwd=cwd, providers=providers)
 
         if args.cmd == "index":
             return cmd_index(args, providers=providers, cwd=cwd, json_mode=json_mode)
