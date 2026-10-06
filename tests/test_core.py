@@ -197,3 +197,39 @@ def test_opencode_and_copilot(more_providers):
     msgs = load_transcript(cp[0]).messages
     assert msgs[0].text == "fix the login bug" and msgs[1].role == "assistant"
     assert resolve_session("copilot:c0ffee").session_id.startswith("c0ffee00")
+
+
+def test_redaction():
+    from puenteo.redact import redact
+
+    raw = (
+        "key sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAA and ghp_" + "a" * 36 + "\n"
+        "OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz123\n"
+        "Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123\n"
+        "postgres://admin:hunter22@db.local/x  AKIAABCDEFGHIJKLMNOP\n"
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----\n"
+        "normal text sk-short and tokenizer"
+    )
+    out = redact(raw)
+    for leaked in ("sk-ant-api03", "ghp_aaaa", "sk-proj-abc", "abcdefghijklmnopqrstuvwxyz0123", "hunter22", "AKIAABCD", "MIIE"):
+        assert leaked not in out, leaked
+    assert "OPENAI_API_KEY=" in out and "Authorization: Bearer" in out and "postgres://admin:" in out
+    assert "normal text sk-short and tokenizer" in out
+
+
+def test_cli_redacts_pull(fake_home, capsys, monkeypatch):
+    import json as _json
+
+    from conftest import _jsonl
+    from puenteo.cli import main
+
+    enc = "".join(c if c.isalnum() else "-" for c in str(fake_home["proj"]))
+    _jsonl(fake_home["home"] / ".claude" / "projects" / enc / "22222222-aaaa-4bbb-8ccc-000000000002.jsonl", [
+        {"type": "user", "sessionId": "22222222-aaaa-4bbb-8ccc-000000000002", "cwd": str(fake_home["proj"]),
+         "message": {"role": "user", "content": "my token is ghp_" + "b" * 36}},
+    ])
+    assert main(["pull", "22222222", "--mode", "last"]) == 0
+    out = capsys.readouterr().out
+    assert "ghp_bbbb" not in out and "[REDACTED:github]" in out
+    assert main(["pull", "22222222", "--mode", "last", "--no-redact"]) == 0
+    assert "ghp_bbbb" in capsys.readouterr().out

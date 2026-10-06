@@ -58,6 +58,12 @@ def _common_flags(target: argparse.ArgumentParser) -> None:
         default=argparse.SUPPRESS,
         help="Filter sessions by project path (absolute, ~, or substring like harbor-datasets)",
     )
+    target.add_argument(
+        "--no-redact",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Do not mask secrets (API keys, tokens) in output",
+    )
 
 
 def _pull_flags(sp: argparse.ArgumentParser) -> None:
@@ -118,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", "-V", action="version", version=f"{APP_NAME} {__version__}")
     _common_flags(p)
     # defaults when flags omitted on both parent and subparser
-    p.set_defaults(json=False, provider="all", cwd=None)
+    p.set_defaults(json=False, provider="all", cwd=None, no_redact=False)
 
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -228,6 +234,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--tools", action="store_true", help="Include tool calls/results")
     sp.add_argument("--thinking", action="store_true", help="Include thinking blocks")
+    sp.add_argument("--redact", action="store_true", help="Mask secrets (API keys, tokens) in the export")
     sp.add_argument(
         "--query",
         "-q",
@@ -287,6 +294,27 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     providers = _parse_providers(getattr(args, "provider", "all"))
+    from .redact import enabled_by_default
+
+    if (
+        args.cmd in ("show", "search", "pull", "pack", "outline", "follow")
+        and not getattr(args, "no_redact", False)
+        and enabled_by_default()
+    ):
+        orig = sys.stdout
+        sys.stdout = _RedactingStream(orig)
+        try:
+            return _main(args, parser, providers)
+        finally:
+            try:
+                sys.stdout.flush()
+            except Exception:
+                pass
+            sys.stdout = orig
+    return _main(args, parser, providers)
+
+
+def _main(args, parser, providers) -> int:
     cwd = getattr(args, "cwd", None)
     # Keep raw fragments (e.g. harbor-datasets) — cwd_matches handles them.
     # Only expand ~ and relative paths that look path-like.
@@ -491,6 +519,34 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
 
+class _RedactingStream:
+    """stdout wrapper that masks secrets in everything written (line-buffered)."""
+
+    def __init__(self, inner):
+        self._inner = inner
+        self._buf = ""
+
+    def write(self, s: str) -> int:
+        from .redact import redact
+
+        self._buf += s
+        if "\n" in self._buf:
+            head, _, self._buf = self._buf.rpartition("\n")
+            self._inner.write(redact(head + "\n"))
+        return len(s)
+
+    def flush(self) -> None:
+        from .redact import redact
+
+        if self._buf:
+            self._inner.write(redact(self._buf))
+            self._buf = ""
+        self._inner.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
 def cmd_export(args, *, providers, cwd) -> int:
     from .exporters import SUPPORTED_FORMATS, render
     from .rich import load_transcript as load_rich
@@ -576,6 +632,10 @@ def cmd_export(args, *, providers, cwd) -> int:
             include_tools=bool(args.tools),
             include_thinking=bool(args.thinking),
         )
+        if getattr(args, "redact", False) and fmt_name not in ("pdf", "zip"):
+            from .redact import redact
+
+            data = redact(data.decode("utf-8", "replace")).encode("utf-8")
         if len(formats) == 1 and not out and fmt_name in ("md", "txt", "html", "json", "csv", "xml", "yaml"):
             # text-ish → stdout
             sys.stdout.buffer.write(data)

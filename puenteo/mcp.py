@@ -380,6 +380,10 @@ class Server:
             try:
                 data = fn(params.get("arguments") or {})
                 text = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, indent=1, default=str)
+                from .redact import enabled_by_default, redact
+
+                if enabled_by_default():
+                    text = redact(text)
                 return {"content": [{"type": "text", "text": text}], "isError": False}
             except Exception as e:
                 return {"content": [{"type": "text", "text": f"error: {e}"}], "isError": True}
