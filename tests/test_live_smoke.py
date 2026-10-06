@@ -183,6 +183,10 @@ class CliHelpTests(unittest.TestCase):
         self.assertEqual(args.group_by, "cwd")
 
 
+LIVE = unittest.skipUnless(os.environ.get("PUENTEO_LIVE_TESTS"), "set PUENTEO_LIVE_TESTS=1 to run against real local stores")
+
+
+@LIVE
 class LibraryApiTests(unittest.TestCase):
     def test_package_exports(self):
         import puenteo
@@ -245,7 +249,7 @@ class MultiProviderTests(unittest.TestCase):
             self.assertNotIn("/.gemini/antigravity/brain/", tr.session.cwd.replace("\\", "/"))
 
 
-@unittest.skipUnless(os.environ.get("PUENTEO_LIVE_TESTS"), "set PUENTEO_LIVE_TESTS=1 to run against real local stores")
+@LIVE
 class LiveCwdTitleTests(unittest.TestCase):
     """Integration checks against real local stores when present."""
 
