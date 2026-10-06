@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "uvx --from puenteo puenteo hook SessionStart --agent claude --quiet-start", "timeout": 15 }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "uvx --from puenteo puenteo hook UserPromptSubmit --agent claude", "timeout": 15 }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "uvx --from puenteo puenteo hook Stop --agent claude", "timeout": 15 }] }
+    ]
+  }
+}

@@ -20,7 +20,8 @@ Library::
     hits = puenteo.search("export markdown")
     msgs = puenteo.pull("019f7a24", query="dmg", mode="query")
 
-Providers: Claude Code, Codex, Grok, Pi.
+Providers: Claude Code, Codex, Gemini, Antigravity, Cursor, Grok, Pi, Qwen, Continue, Aider, OpenHands, Goose.
+Live bus: puenteo.bus.Bus, puenteo.live.live_sessions, puenteo.live.whoami.
 Formats: md, txt, html, pdf, json, zip, csv, xml, yaml.
 """
 

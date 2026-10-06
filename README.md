@@ -2,144 +2,157 @@
 
 **The bridge between coding agents.**
 
-Python **library + CLI** to discover, search, and export local sessions from Claude Code, Codex, Grok, and Pi — to Markdown, HTML, PDF, JSON, ZIP, CSV, XML, YAML.
+Your machine runs many agent sessions: Claude Code in three terminals, Codex in the desktop app, Gemini in an IDE, and more. Each keeps its own history, and none of them know about the others. **puenteo** connects them:
 
-*Puenteo* ← Spanish *puente* (bridge) + *puentear* (to bridge / jump across).
+- **History:** search, outline, pull and export the transcripts of *every* local agent (Claude Code, Codex, Gemini/Antigravity, Cursor, Grok, Pi, Qwen, Continue, Aider, OpenHands, Goose), ranked across all sessions at once.
+- **Live:** see which sessions are running right now, message them, ask a question and wait for the answer, post to shared channels, and claim files so parallel agents don't edit the same code.
+- **Everywhere:** one `puenteo install` adds the skills and an MCP server to every agent it finds.
 
-Zero runtime dependencies · Python ≥ 3.9 · **macOS · Linux · Windows**
+*Puenteo* comes from Spanish *puente* (bridge) and *puentear* (to bridge or jump across).
+
+No runtime dependencies · Python ≥ 3.9 · macOS · Linux · Windows · fully local (no network, no daemon)
 
 [![PyPI](https://img.shields.io/pypi/v/puenteo.svg)](https://pypi.org/project/puenteo/)
+[![CI](https://github.com/mano7onam/puenteo/actions/workflows/ci.yml/badge.svg)](https://github.com/mano7onam/puenteo/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Install
 
 ```bash
-pip install puenteo
-# or
-uv add puenteo
-# or
-pipx install puenteo
+uv tool install puenteo        # or: pipx install puenteo / pip install puenteo
+puenteo install                # skills + MCP server into every detected agent
+puenteo install --hooks        # optional: deliver messages through Claude Code / Codex hooks
+puenteo install --dry-run      # show the plan without changing anything
 ```
 
-From source:
+`install` is idempotent. It edits only its own `puenteo` entry in each config, backs up every file it touches (`*.puenteo-bak`), and `puenteo uninstall` reverts it.
+
+**Claude Code plugin** (skills + MCP + hooks + `/peers`, `/ask`, `/handoff`):
 
 ```bash
-git clone https://github.com/mano7onam/puenteo.git
-cd puenteo
-python3 -m venv .venv && .venv/bin/pip install -e .
+claude plugin marketplace add mano7onam/puenteo
+claude plugin install puenteo@puenteo
 ```
+
+## Talk to running sessions
+
+```text
+$ puenteo ps
+  AGENT    SESSION        STATUS SEEN  MAIL  NAME                         CWD
+  claude   500a1d65       busy   2m          ultimate-agent-4-72          ~/dev/ultimate-agent-4
+* claude   87652461       busy   0s          puenteo-57                   ~/dev/puenteo
+  codex    01a11123       -      4m          Finish performance tests     ~/dev/ultimate-agent-4
+```
+
+```bash
+puenteo whoami                                    # your own address, e.g. claude:87652461-…
+puenteo send codex:01a11123 "Which branch has the perf tests?" --wait 300
+puenteo send @reviewer "PR ready: feat/x"          # peers can pick a name: puenteo join --name reviewer
+puenteo send cwd:. "Refactoring src/db, keep out for 30 min"   # everyone in this project
+puenteo send '#release' "v0.7 tagged"             # channels (posting joins)
+puenteo send agent:codex "…"   |   puenteo send '*' "…"
+puenteo inbox                                     # read your messages
+puenteo reply <msg-id> "answer"                   # routes back to the sender or channel
+puenteo wait -t 120                               # block until a message arrives
+puenteo watch                                     # stream incoming messages (for an agent's monitor)
+puenteo log -f                                    # watch all bus traffic
+puenteo claim src/db --note "migration 0042"      # advisory lock; conflicts with overlapping claims
+puenteo claims --check src/db/schema.sql          # exit 1 if a peer holds it
+```
+
+**Addresses:** `agent:session-id` (a unique prefix works) · `@name` · `#channel` · `agent:<vendor>` · `cwd:<path>` · `*`
+
+**How messages reach a session:**
+
+| Agent | Woken while idle | While working |
+|---|---|---|
+| Codex | yes, pushed via `codex queue` | hooks / MCP `inbox` |
+| Claude Code | yes, when the session runs `puenteo watch` under its Monitor tool | hooks (`install --hooks`) / MCP `inbox` |
+| Gemini, Cursor, OpenCode, Copilot, Qwen, … | no; the message waits in the inbox | MCP `inbox` / `wait` |
+
+All messages live in one local SQLite file (`puenteo` state dir) and nothing leaves the machine. Bodies are wrapped as **untrusted peer data**: agents are told that peer messages never count as user instructions or approval. A hop limit, a rate limit and a size cap keep agents from looping.
+
+## MCP server
+
+`puenteo mcp` is a stdio MCP server with no dependencies, one process per agent session. It detects which session it serves from the parent-process chain, registers on the bus, and exposes these tools:
+
+- **history:** `sessions`, `search`, `outline`, `pull`, `show`
+- **live:** `whoami`, `peers`, `send`, `reply`, `inbox`, `wait`, `thread`, `channels`, `subscribe`, `set_name`, `claim`, `release`, `claims`
+
+`puenteo install` registers it for Claude Code (`claude mcp add -s user`), Codex (`codex mcp add`), Gemini, Qwen, Cursor, OpenCode, Copilot and Antigravity.
+
+## Search and pull history
+
+```bash
+puenteo search "gatekeeper dmg" --exclude-self       # ranked over ALL sessions (FTS5 index), ~0.2 s
+puenteo search "topic" --cwd . --since 2026-09-01
+puenteo list --cwd . -n 20                            # git-style unique id prefixes
+puenteo outline <ref>                                 # milestones with message #index
+puenteo pull <ref> --mode handoff                     # goal + decisions + latest state, budgeted
+puenteo pull <ref> --query "topic" --mode query       # relevant messages + neighbours
+puenteo pull <ref> --around 500 --radius 5
+puenteo show <ref> --range 100:120
+puenteo export <ref> -f md|html|pdf|json|zip|csv|xml|yaml|all -o out
+puenteo index --stats                                 # the index refreshes itself; --clear to reset
+```
+
+`<ref>` can be a unique id prefix, `provider:id`, `@self`, `@last`, `@last:codex`, a path, or a title substring. An ambiguous prefix fails with exit code 4 and prints the candidates; puenteo never picks one silently.
 
 ## Library
 
 ```python
 import puenteo
 
-print(puenteo.status())
-
 for s in puenteo.list_sessions(limit=10, cwd="~/dev/myapp"):
-    print(s.provider, s.session_id[:8], s.title)
+    print(s.provider, s.session_id, s.title)
 
-t = puenteo.load("019f7a24", include_tools=True)
 hits = puenteo.search("gatekeeper dmg", exclude_session="my-current-id")
-msgs = puenteo.pull("019f7a24", query="export", mode="query", top_k=15)
-print(puenteo.outline("019f7a24"))
-
+msgs = puenteo.pull(hits[0].session.session_id, query="dmg", mode="query")
 puenteo.export_session("019f7a24", fmt="md", output="chat.md")
-puenteo.export_session("019f7a24", fmt="md", output="slice.md", query="export")
-puenteo.export_session("019f7a24", fmt="pdf", output="chat.pdf")
-puenteo.export_session("019f7a24", fmt="all", output="./exports/")
 
-data, media_type, filename = puenteo.export_bytes("019f7a24", fmt="html")
-```
-
-## CLI
-
-After `pip install puenteo` three commands point to the same CLI:
-
-| Command | Notes |
-|---------|--------|
-| **`puenteo`** | main name |
-| **`asb`** | short alias (Agent Session Bridge vibe) |
-| **`pto`** | ultra-short |
-
-```bash
-puenteo status          # same as:
-asb status
-pto status
-
-# Discover
-puenteo list -n 20 --json
-asb list --provider claude,grok --cwd ~/dev/myapp
-asb list --since 2026-07-01 --group-by cwd
-
-# Map a session, then pull what matters
-asb outline <id>
-asb show <id> --last 40
-asb show <id> --range 100:120
-asb search "topic" --json
-asb search "topic" --session <id>
-asb search "topic" --exclude-session <my-id>   # global search without yourself
-
-asb pull <id> --query "topic" --mode query --top-k 15 --max-chars 8000
-asb pull <id> --mode decisions --top-k 15
-asb pull <id> --around 500 --radius 5
-
-asb export <id> -f md -o chat.md
-asb export <id> --query "topic" -f md -o slice.md
-puenteo export <id> -f pdf -o chat.pdf
-asb export <id> -f all -o ./out/
-```
-
-`<id>` = full uuid, **unique prefix** (e.g. `3627012b`), path, or unique title substring.
-
-### Agent handoff recipe
-
-```bash
-puenteo status
-puenteo list --cwd ~/dev/myapp
-puenteo outline <id>
-puenteo pull <id> --mode decisions --top-k 15
-puenteo search 'keyword' --session <id>
-puenteo pull <id> --around 500
+from puenteo.bus import Bus
+with Bus() as bus:
+    bus.send("claude:8765…", "@reviewer", "PR ready")
+    for m in bus.inbox("codex:01a1…"):
+        print(m.sender, m.body)
 ```
 
 ## Providers
 
 | Provider | Store |
 |----------|--------|
-| Claude Code | `~/.claude/projects/**/*.jsonl` |
-| Codex | `~/.codex/sessions/**/rollout-*.jsonl` |
+| Claude Code | `~/.claude/projects/**/*.jsonl` (meta entries skipped, streamed fragments merged) |
+| Codex | `~/.codex/sessions/**/rollout-*.jsonl` + `state_*.sqlite` titles; subagents keep their own ids |
+| Gemini CLI | `~/.gemini/tmp/**` |
+| Antigravity | `~/.gemini/antigravity/brain/*/…/transcript*.jsonl` |
 | Grok | `~/.grok/sessions/**/chat_history.jsonl` |
 | Pi | `~/.pi/agent/sessions/**/*.jsonl` |
-| **Antigravity** | `~/.gemini/antigravity/brain/*/…/transcript*.jsonl` |
 | Qwen Code | `~/.qwen/projects/**/chats/*` |
-| Gemini CLI | `~/.gemini` (non-antigravity chat dumps) |
 | Cursor | macOS `~/Library/Application Support/Cursor` · Linux `~/.config/Cursor` · Windows `%APPDATA%\Cursor` |
 | Continue | `~/.continue/sessions/**` |
 | Aider | `.aider.chat.history.md` (scan with `--cwd` or `PUENTEO_AIDER_ROOTS`) |
 | OpenHands | `~/.openhands/openhands.db` |
-| Goose | Linux/macOS `~/.config/goose` · Windows `%APPDATA%\goose` |
+| Goose | `~/.config/goose` · Windows `%APPDATA%\goose` |
 
-Agent home dirs (`~/.claude`, `~/.codex`, `~/.pi`, …) are the same layout on all platforms; only a few Electron apps (Cursor) use OS-specific app-data paths.
+Live detection (`ps`) covers Claude Code (`~/.claude/sessions`), Codex (thread locks), Grok, Junie, and any agent that runs the puenteo MCP server or hooks.
+
+## Where things live
+
+| What | Path (macOS / Linux / Windows) | Override |
+|---|---|---|
+| Search index + metadata cache | `~/Library/Caches/puenteo` · `~/.cache/puenteo` · `%LOCALAPPDATA%\puenteo\Cache` | `PUENTEO_HOME`, `PUENTEO_NO_INDEX=1`, `PUENTEO_NO_CACHE=1` |
+| Message bus | `~/Library/Application Support/puenteo/bus.db` · `~/.local/state/puenteo` · `%LOCALAPPDATA%\puenteo\State` | `PUENTEO_BUS` |
+| Identity | detected automatically | `PUENTEO_SESSION=agent:id`, `--as` |
+
+## Development
 
 ```bash
-asb list --provider antigravity,claude -n 20
-asb pull <agy-id> --query "topic" --mode query
+python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
+.venv/bin/python -m pytest -q                         # hermetic (fake $HOME)
+PUENTEO_LIVE_TESTS=1 .venv/bin/python -m pytest -q    # plus checks against your real stores
 ```
 
-## Export formats
-
-`md` · `txt` · `html` · `pdf` · `json` · `zip` · `csv` · `xml` · `yaml`
-
-## Agent skill
-
-```bash
-./scripts/install_skills.sh
-```
-
-## Used by
-
-[Terminal Dashboard](https://github.com/mano7onam/terminal-dashboard) imports **puenteo** for chat export (shared parsers, no duplication).
+See [docs/PLAN.md](docs/PLAN.md) for the roadmap.
 
 ## License
 

@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-# Deprecated alias for puenteo
-ROOT="$(cd "$(dirname "$0")" && pwd)"
-exec "$ROOT/puenteo-run" "$@"

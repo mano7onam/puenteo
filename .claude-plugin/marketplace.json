@@ -1,0 +1,16 @@
+{
+  "name": "puenteo",
+  "owner": { "name": "mano", "email": "andrey.matveev.mano@gmail.com" },
+  "metadata": {
+    "description": "Puenteo — the bridge between coding-agent sessions: search history across agents and message live sessions."
+  },
+  "plugins": [
+    {
+      "name": "puenteo",
+      "source": "./plugin",
+      "description": "Search/pull history of every local agent session (Claude, Codex, Gemini, Cursor, …) and message running sessions over a local bus.",
+      "category": "productivity",
+      "keywords": ["sessions", "handoff", "multi-agent", "codex", "messaging", "mcp"]
+    }
+  ]
+}

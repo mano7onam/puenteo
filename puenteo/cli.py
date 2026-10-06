@@ -246,6 +246,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_bus_parsers(sub, _common_flags)
 
+    for name, hlp in (
+        ("install", "Install skills + MCP server (+ --hooks) into every detected agent"),
+        ("uninstall", "Remove what `puenteo install` added"),
+    ):
+        sp = sub.add_parser(name, help=hlp)
+        _common_flags(sp)
+        sp.add_argument("--agent", "-a", default=None, help="Comma list: claude,codex,gemini,cursor,opencode,copilot,qwen,grok,pi,antigravity")
+        sp.add_argument("--no-skills", action="store_true")
+        sp.add_argument("--no-mcp", action="store_true")
+        sp.add_argument("--hooks", action="store_true", help="Also install message-delivery hooks (Claude Code, Codex)")
+        sp.add_argument("--dry-run", "-n", action="store_true", help="Show the plan, change nothing")
+
+    sp = sub.add_parser("mcp", help="Run the puenteo MCP server on stdio (agents start this)")
+    sp.add_argument("mcp_args", nargs=argparse.REMAINDER)
+
     sp = sub.add_parser("status", help="Show what providers/session stores were found")
     _common_flags(sp)
     sp = sub.add_parser("doctor", help="Alias for status")
@@ -256,6 +271,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[List[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["mcp"]:  # own argv; must not be parsed by the main parser
+        from .mcp import main as mcp_main
+
+        return mcp_main(argv[1:])
     parser = build_parser()
     args = parser.parse_args(argv)
     providers = _parse_providers(getattr(args, "provider", "all"))
@@ -290,12 +309,38 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
             return 0
 
+        if args.cmd == "mcp":
+            from .mcp import main as mcp_main
+
+            return mcp_main(args.mcp_args)
+
         from .cli_bus import BUS_COMMANDS
 
         if args.cmd in BUS_COMMANDS:
             from .cli_bus import run as run_bus
 
             return run_bus(args, json_mode=json_mode, cwd=cwd, providers=providers)
+
+        if args.cmd in ("install", "uninstall"):
+            from . import install as inst
+
+            only = [a.strip() for a in (args.agent or "").split(",") if a.strip()] or None
+            steps = inst.plan_and_apply(
+                only=only,
+                skills=not args.no_skills,
+                mcp=not args.no_mcp,
+                hooks=args.hooks,
+                dry=args.dry_run,
+                remove=args.cmd == "uninstall",
+            )
+            if json_mode:
+                import json as _json
+                from dataclasses import asdict
+
+                print(_json.dumps([asdict(s) for s in steps], indent=2))
+            else:
+                print(inst.render(steps, dry=args.dry_run))
+            return 1 if any(s.action.startswith("failed") for s in steps) else 0
 
         if args.cmd == "index":
             return cmd_index(args, providers=providers, cwd=cwd, json_mode=json_mode)

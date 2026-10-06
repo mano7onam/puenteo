@@ -1,0 +1,14 @@
+{
+  "name": "puenteo",
+  "displayName": "Puenteo",
+  "version": "0.7.0",
+  "description": "Bridge between coding-agent sessions: search past sessions of any agent, see who is running now, send messages, claim files.",
+  "author": { "name": "mano", "email": "andrey.matveev.mano@gmail.com" },
+  "homepage": "https://github.com/mano7onam/puenteo",
+  "repository": "https://github.com/mano7onam/puenteo",
+  "license": "MIT",
+  "keywords": ["sessions", "handoff", "multi-agent", "messaging"],
+  "mcpServers": {
+    "puenteo": { "command": "uvx", "args": ["--from", "puenteo", "puenteo", "mcp"] }
+  }
+}

@@ -426,26 +426,102 @@ def whoami(*, pid: Optional[int] = None) -> Optional[Me]:
     return me
 
 
+_AGENT_EXES = {
+    "claude": "claude_code",
+    "codex": "codex",
+    "CodexCLI": "codex",
+    "grok": "grok",
+    "gemini": "gemini",
+    "qwen": "qwen",
+    "opencode": "opencode",
+    "copilot": "copilot",
+    "cursor-agent": "cursor",
+    "goose": "goose",
+    "aider": "aider",
+    "pi": "pi",
+    "junie": "junie",
+}
+
+
+def _proc_name(pid: int) -> str:
+    """Executable basename of ``pid`` ("" if unknown)."""
+    if sys.platform.startswith("linux"):
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fh:
+                argv = fh.read().split(b"\0")
+            return _exe_label([a.decode("utf-8", "replace") for a in argv if a])
+        except Exception:
+            return ""
+    if sys.platform == "win32":
+        return ""
+    try:
+        out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, timeout=5)
+        return _exe_label(out.stdout.strip().split())
+    except Exception:
+        return ""
+
+
+def _exe_label(argv: List[str]) -> str:
+    if not argv:
+        return ""
+    base = os.path.basename(argv[0])
+    # node/python launchers: look at the script (e.g. node …/bin/gemini)
+    if base in ("node", "bun", "deno", "python", "python3") and len(argv) > 1:
+        for a in argv[1:3]:
+            b = os.path.basename(a)
+            if b in _AGENT_EXES or b.split(".")[0] in _AGENT_EXES:
+                return b.split(".")[0]
+    return base
+
+
+def nearest_agent(pid: Optional[int] = None) -> Optional[tuple]:
+    """(agent, pid) of the closest ancestor process that is a known coding agent."""
+    for p in parent_pids(pid)[1:]:
+        name = _proc_name(p)
+        agent = _AGENT_EXES.get(name)
+        if agent:
+            return agent, p
+    return None
+
+
 def _whoami(pid: Optional[int]) -> Optional[Me]:
     cwd = os.getcwd()
+    explicit = os.environ.get("PUENTEO_SESSION", "").strip()
+    if explicit and pid is None:
+        if ":" in explicit:
+            a, sid = explicit.split(":", 1)
+            from .providers import normalize_provider_name
+
+            return Me(agent=normalize_provider_name(a), session_id=sid, cwd=cwd, how="PUENTEO_SESSION")
+        return Me(agent=_guess_agent_from_env() or "unknown", session_id=explicit, cwd=cwd, how="PUENTEO_SESSION")
+
+    chain = parent_pids(pid)
+    near = nearest_agent(pid)
+    near_agent = near[0] if near else None
+
+    # Agent env vars are inherited by every child — including *other* agents
+    # started from inside a session. Trust one only if that agent is our
+    # nearest agent ancestor (or we can't tell).
     if pid is None:
-        for var, agent in _ENV_HINTS:
+        for var, agent in _ENV_HINTS[1:]:
             val = os.environ.get(var, "").strip()
             if not val:
                 continue
-            if agent is None:  # PUENTEO_SESSION may be "agent:id" or just an id
-                if ":" in val:
-                    a, sid = val.split(":", 1)
-                    from .providers import normalize_provider_name
-
-                    return Me(agent=normalize_provider_name(a), session_id=sid, cwd=cwd, how=var)
-                return Me(agent=_guess_agent_from_env() or "unknown", session_id=val, cwd=cwd, how=var)
+            if near_agent and near_agent != agent:
+                continue
+            if agent == "claude_code" and near and os.environ.get("CLAUDE_PID"):
+                try:
+                    if int(os.environ["CLAUDE_PID"]) != near[1]:
+                        continue
+                except ValueError:
+                    pass
             return Me(agent=agent, session_id=val, cwd=cwd, how=var)
 
-    chain = parent_pids(pid)
     # Claude: <pid>.json for any ancestor (MCP servers and hooks are children of claude)
     d = _home() / ".claude" / "sessions"
     for p in chain:
+        if near and near_agent != "claude_code" and p == near[1]:
+            break  # reached a non-Claude agent: anything above it belongs to another session
         f = d / f"{p}.json"
         if f.is_file():
             try:
@@ -479,8 +555,31 @@ def _whoami(pid: Optional[int]) -> Optional[Me]:
             here.sort(key=lambda s: s.updated_at, reverse=True)
             s = here[0]
             return Me(agent="codex", session_id=s.session_id, cwd=s.cwd or cwd, pid=s.pid, how="codex-lock-guess")
+        if near_agent == "codex":
+            # codex exec / fresh thread: newest rollout in this cwd written by our codex process
+            s = _newest_codex_rollout_for(near[1], cwd)
+            if s:
+                return Me(agent="codex", session_id=s, cwd=cwd, pid=near[1], how="codex-rollout")
     except Exception:
         pass
+    return None
+
+
+def _newest_codex_rollout_for(codex_pid: int, cwd: str) -> Optional[str]:
+    """Thread id of the rollout file the given codex process has open (lsof)."""
+    if sys.platform == "win32":
+        return None
+    try:
+        out = subprocess.run(["lsof", "-p", str(codex_pid), "-F", "n"], capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return None
+    import re
+
+    for line in out.splitlines():
+        if line.startswith("n") and "/.codex/sessions/" in line and line.endswith(".jsonl"):
+            m = re.search(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$", line)
+            if m:
+                return m.group(1)
     return None
 
 
