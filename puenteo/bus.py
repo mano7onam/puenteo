@@ -350,6 +350,12 @@ class Bus:
             raise BusError("empty recipient")
         if to.startswith("#"):
             return [a for a in self.members(to) if a != me]
+        if to.startswith("@") and to not in ("@self", "@me"):
+            row = self.con.execute("SELECT address FROM peers WHERE name=?", (to[1:],)).fetchone()
+            if row:
+                return [row[0]]
+        if ":" in to and not to.startswith(("agent:", "cwd:")):
+            return self._resolve_concrete(to)
         live = self._live_addresses()
         if to == "*":
             return [a for a in live if a != me]
@@ -378,12 +384,18 @@ class Bus:
                         return [s.address]
                 raise BusError(f"no peer named @{name} (see `puenteo ps`)")
             return [row[0]]
+        return self._resolve_concrete(to)
+
+    def _resolve_concrete(self, to: str) -> List[str]:
         # concrete address, maybe a prefix of the id
         if ":" in to:
             agent = agent_of(to)
             sid_prefix = to.split(":", 1)[1]
+            known = {p.address for p in self.peers()}
+            if to in known:
+                return [to]
             cands = set()
-            for a in set(live) | {p.address for p in self.peers()}:
+            for a in set(self._live_addresses()) | known:
                 if agent_of(a) == agent and a.split(":", 1)[1].startswith(sid_prefix):
                     cands.add(a)
             if len(cands) == 1:
@@ -395,7 +407,7 @@ class Bus:
                 raise BusError(f"ambiguous recipient {to!r}: {', '.join(sorted(cands)[:6])}")
             return [to]  # offline/unknown session: message waits in its inbox
         # bare id prefix without agent
-        hits = [a for a in set(live) | {p.address for p in self.peers()} if a.split(":", 1)[-1].startswith(to)]
+        hits = [a for a in set(self._live_addresses()) | {p.address for p in self.peers()} if a.split(":", 1)[-1].startswith(to)]
         if len(hits) == 1:
             return hits
         if len(hits) > 1:
