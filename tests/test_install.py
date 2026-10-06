@@ -115,6 +115,7 @@ def test_manifest_versions_match():
             assert json.loads(p.read_text())["version"] == __version__, rel
 
 
+@pytest.mark.skipif(__import__("sys").platform == "win32", reason="POSIX symlinks and file modes")
 def test_install_writes_through_symlink_and_keeps_mode(home, tmp_path):
     import os
     import stat

@@ -287,6 +287,7 @@ def test_listen_generator(bus, monkeypatch):
     assert got.body == "ping-listen"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="test command uses POSIX sh syntax")
 def test_watch_exec(bus, tmp_path):
     from puenteo.cli import main
 

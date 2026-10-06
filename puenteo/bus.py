@@ -129,8 +129,13 @@ class Claim:
 _ADDR_RE = re.compile(r"^[\w.:@#*/~+=-]{1,300}$")
 
 
+_CWD_RE = re.compile(r"^cwd:[^\x00-\x1f<>\"]{0,1024}$")
+
+
 def check_address(addr: str) -> str:
     """Addresses are interpolated into agent context; keep them to a safe charset."""
+    if addr and addr.startswith("cwd:") and _CWD_RE.match(addr):
+        return addr  # project paths (Windows backslashes, spaces) — no quotes/angle brackets/control chars
     if not addr or not _ADDR_RE.match(addr):
         raise BusError(f"invalid address/id {addr!r}: use letters, digits and . : @ # * / ~ + = - _")
     return addr
@@ -800,9 +805,13 @@ def _norm_resource(r: str) -> str:
     return r  # free-form task name, e.g. "task:migrate-db"
 
 
+def _safe(s: str) -> str:
+    return (s or "").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("\n", " ")
+
+
 def format_message(m: BusMessage, *, wrap: bool = True) -> str:
     """Render a message for an agent's context, marked as untrusted peer data."""
-    head = f"from {m.sender} → {m.to}  id={m.id}"
+    head = f"from {m.sender} → {_safe(m.to)}  id={m.id}"
     if m.reply_to:
         head += f"  reply_to={m.reply_to}"
     if m.thread and m.thread != m.id:
