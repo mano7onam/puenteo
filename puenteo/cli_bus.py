@@ -13,7 +13,7 @@ from .bus import Bus, BusError, BusMessage, format_message, normalize_address
 
 BUS_COMMANDS = (
     "ps", "whoami", "join", "send", "inbox", "reply", "wait", "watch", "thread",
-    "log", "channels", "subscribe", "unsubscribe", "claim", "release", "claims", "hook",
+    "log", "channels", "subscribe", "unsubscribe", "claim", "release", "claims", "hook", "prune",
 )
 
 
@@ -108,6 +108,11 @@ def add_parsers(sub, common) -> None:
     common(sp)
     sp.add_argument("--check", nargs="+", default=None, metavar="PATH")
     _as_flag(sp)
+
+    sp = sub.add_parser("prune", help="Drop old bus messages and dead peers (or --peer ADDR to forget one)")
+    common(sp)
+    sp.add_argument("--days", type=float, default=14)
+    sp.add_argument("--peer", action="append", default=[], help="Forget this peer address (repeatable)")
 
     sp = sub.add_parser("hook", help="Agent hook entry point (reads hook JSON on stdin)")
     sp.add_argument("event", help="SessionStart | UserPromptSubmit | PostToolUse | Stop")
@@ -405,6 +410,16 @@ def _run(cmd: str, args, *, json_mode: bool, cwd, providers) -> int:
                 mine = " (you)" if c.holder == me else ""
                 print(f"{c.resource}\n    by {c.holder}{mine}  {int(c.expires - time.time())}s left  {c.note}")
         return 1 if args.check and rows else 0
+
+    if cmd == "prune":
+        for a in args.peer:
+            bus.forget(a)
+        n = bus.prune(older_than_days=args.days)
+        dead = [p.address for p in bus.peers() if not p.alive() and time.time() - p.last_seen > args.days * 86400]
+        for a in dead:
+            bus.forget(a)
+        print(f"pruned {n} message(s), forgot {len(args.peer) + len(dead)} peer(s)")
+        return 0
 
     raise BusError(f"unknown command {cmd}")
 
