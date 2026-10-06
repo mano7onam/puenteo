@@ -188,6 +188,9 @@ class Server:
         def _pull(a):
             s = sess(a["session"])
             mode = a.get("mode") or ("query" if a.get("query") else ("around" if a.get("around") is not None else "handoff"))
+            if mode == "handoff":
+                return {"text": extract.handoff_brief(load_transcript(s), query=a.get("query"),
+                                                      max_chars=int(a.get("max_chars") or 12000))}
             msgs = extract.smart_pull(load_transcript(s), query=a.get("query"), mode=mode,
                                       around=a.get("around"), radius=int(a.get("radius") or 5),
                                       max_chars=int(a.get("max_chars") or 12000), top_k=int(a.get("top_k") or 0))

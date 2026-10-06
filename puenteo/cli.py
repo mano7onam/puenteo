@@ -92,6 +92,7 @@ def _pull_flags(sp: argparse.ArgumentParser) -> None:
     sp.add_argument("--max-chars", type=int, default=12000)
     sp.add_argument("--max-messages", type=int, default=30)
     sp.add_argument("--tools", action="store_true")
+    sp.add_argument("--raw", action="store_true", help="handoff: plain message list instead of the structured brief")
     sp.add_argument(
         "-o",
         "--output",
@@ -422,6 +423,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                 around=args.around,
                 radius=args.radius,
             )
+            if mode in ("auto", "handoff") and not args.around and not json_mode and not getattr(args, "raw", False):
+                text = extract.handoff_brief(tr, query=args.query, max_chars=args.max_chars)
+                if args.output:
+                    path = os.path.abspath(os.path.expanduser(args.output))
+                    with open(path, "w", encoding="utf-8") as fh:
+                        fh.write(text)
+                    print(f"Wrote {path} ({len(text)} chars)", file=sys.stderr)
+                else:
+                    sys.stdout.write(text)
+                return 0
             purpose = mode if mode != "auto" else "handoff"
             if args.around is not None and purpose == "around":
                 purpose = f"around:{args.around}"

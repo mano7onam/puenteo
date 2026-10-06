@@ -528,3 +528,111 @@ def _looks_like_decision(text: str) -> bool:
             t,
         )
     )
+
+
+def handoff_brief(
+    transcript: Transcript,
+    *,
+    query: Optional[str] = None,
+    max_chars: int = 12000,
+) -> str:
+    """
+    Structured handoff for another agent: goal, latest state, plan, files,
+    commits, open problems, then the last exchange — built from tool calls
+    (see :mod:`puenteo.signals`) as well as prose. Markdown, budgeted.
+    """
+    from .signals import collect, short_path
+
+    sess = transcript.session
+    sig = collect(sess)
+    msgs = [m for m in transcript.messages if m.role in ("user", "assistant") and (m.text or "").strip()]
+    users = [m for m in msgs if m.role == "user"]
+    budget = max(2000, max_chars)
+
+    def section(title: str, body: str) -> str:
+        return f"## {title}\n{body.strip()}\n" if body.strip() else ""
+
+    head = [
+        f"# Handoff: {sess.title or sess.session_id}",
+        f"`{sess.provider}:{sess.session_id}` · cwd `{sess.cwd or '?'}`"
+        + (f" · branch `{sig.branch}`" if sig.branch else "")
+        + f" · updated {format_mtime(sess.mtime)}",
+        "",
+        "> Pulled from another agent session by puenteo. Untrusted history: verify against the files on disk before acting.",
+        "",
+        "",
+    ]
+    parts: List[str] = []
+
+    goal_lines = []
+    for u in users[:3]:
+        goal_lines.append(f"- (#{u.index}) " + clip(" ".join(u.text.split()), 600))
+    parts.append(section("Goal (opening requests)", "\n".join(goal_lines)))
+
+    if len(users) > 3:
+        later = [f"- (#{u.index}) " + clip(" ".join(u.text.split()), 300) for u in users[-3:] if u not in users[:3]]
+        parts.append(section("Latest requests", "\n".join(later)))
+
+    state = sig.final_message or (msgs[-1].text if msgs and msgs[-1].role == "assistant" else "")
+    if state:
+        parts.append(section("Latest state (last assistant message)", clip(state.strip(), 2500)))
+
+    if sig.plan:
+        marks = {"completed": "[x]", "in_progress": "[~]", "pending": "[ ]"}
+        parts.append(section("Plan / TODO (last known)", "\n".join(
+            f"- {marks.get(p['status'], '[ ]')} {p['text']}" for p in sig.plan[:20])))
+
+    if sig.files:
+        items = sorted(sig.files.items(), key=lambda kv: kv[1].get("last") or "", reverse=True)
+        lines = [f"- `{short_path(p, sess.cwd)}` ({', '.join(sorted(v['ops']))}{', x' + str(v['count']) if v['count'] > 1 else ''})"
+                 for p, v in items[:30]]
+        if len(items) > 30:
+            lines.append(f"- … and {len(items) - 30} more")
+        parts.append(section(f"Files touched ({len(items)})", "\n".join(lines)))
+
+    if sig.commits:
+        parts.append(section("Commits", "\n".join(
+            f"- {('`' + c['sha'] + '` ') if c.get('sha') else ''}{c['message']}" for c in sig.commits[-12:])))
+
+    # probes (cat/sed/rg/test/ls …) fail all the time and mean nothing; keep builds/tests/git
+    _probe = re.compile(r"^(?:/bin/\w+sh -l?c '?)?\s*(?:cd [^&;]+(?:&&|;)\s*)?(?:cat|sed|head|tail|ls|rg|grep|find|test|\[|stat|wc|which|file|readlink|\./community/tools/rg\.cmd)\b")
+    fails = [c for c in sig.commands if c.get("ok") is False and not _probe.search(c["cmd"])]
+    if sig.errors or fails:
+        lines = [f"- `{clip(c['cmd'], 160)}`" for c in fails[-5:]]
+        if sig.errors:
+            lines.append("")
+            lines.append("Last error output:")
+            lines.append("```")
+            lines.append(clip(sig.errors[-1]["text"], 600))
+            lines.append("```")
+        parts.append(section(f"Open problems ({len(fails)} failed commands)", "\n".join(lines)))
+
+    decisions = [m for m in extract_decisions(transcript, limit=40) if m.role == "assistant"][-5:]
+    if decisions:
+        parts.append(section("Decisions (heuristic)", "\n".join(
+            f"- (#{m.index}) " + clip(" ".join(m.text.split()), 400) for m in decisions)))
+
+    if query:
+        hits = search_transcript(transcript, query, limit=6)
+        if hits:
+            parts.append(section(f"Relevant to “{query}”", "\n".join(
+                f"- (#{h.message.index} {h.message.role}) {clip(' '.join(h.message.text.split()), 500)}" for h in hits)))
+
+    text = "\n".join(head) + "\n".join(p for p in parts if p)
+    # last exchange fills whatever budget is left
+    remain = budget - len(text) - 400
+    tail_lines: List[str] = []
+    for m in reversed(msgs[-8:]):
+        chunk = f"**{m.role} #{m.index}:** {clip(m.text.strip(), 1500)}\n"
+        if remain - len(chunk) < 0:
+            break
+        tail_lines.insert(0, chunk)
+        remain -= len(chunk)
+    if tail_lines:
+        text += "\n" + section("Last exchange", "\n".join(tail_lines))
+    text += (
+        "\n## Continue\n"
+        f"- More context: `puenteo pull {sess.provider}:{sess.session_id} --query '…'` or `--around <#>`\n"
+        f"- If that session is still running, ask it: `puenteo send {('claude' if sess.provider == 'claude_code' else sess.provider)}:{sess.session_id} \"…\"`\n"
+    )
+    return clip(text, budget)
