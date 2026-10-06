@@ -105,16 +105,31 @@ def refresh(
 
         t0 = time.time()
         done = 0
-        for i, s in enumerate(todo):
+        def parse(s: Session):
+            try:
+                tr = load_transcript(s, include_tools=False)
+                return [m for m in tr.messages if m.role in ("user", "assistant") and (m.text or "").strip()]
+            except Exception:
+                return []
+
+        from ._native import core as _native_core
+
+        workers = (os.cpu_count() or 4) if _native_core is not None else 1
+        if workers > 1 and len(todo) > 4:
+            # the Rust extractor releases the GIL: threads parse in parallel
+            from concurrent.futures import ThreadPoolExecutor
+
+            pool = ThreadPoolExecutor(max_workers=min(workers, 16))
+            parsed = pool.map(parse, todo)
+        else:
+            pool = None
+            parsed = (parse(s) for s in todo)
+
+        for i, (s, msgs) in enumerate(zip(todo, parsed)):
             if budget_s is not None and time.time() - t0 > budget_s:
                 break
             if progress and sys.stderr.isatty():
                 print(f"\rindexing {i + 1}/{len(todo)} {s.provider} {s.session_id[:13]}", end="", file=sys.stderr)
-            try:
-                tr = load_transcript(s, include_tools=False)
-                msgs = [m for m in tr.messages if m.role in ("user", "assistant") and (m.text or "").strip()]
-            except Exception:
-                msgs = []
             con.execute(
                 "DELETE FROM fts_messages WHERE provider=? AND session_id=? AND path=?",
                 (s.provider, s.session_id, s.path),
@@ -134,6 +149,8 @@ def refresh(
             done += 1
             if done % 25 == 0:
                 con.commit()
+        if pool is not None:
+            pool.shutdown(wait=False, cancel_futures=True) if sys.version_info >= (3, 9) else pool.shutdown(wait=False)
         if progress and todo and sys.stderr.isatty():
             print("", file=sys.stderr)
 

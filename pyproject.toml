@@ -48,6 +48,8 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "build", "twine"]
+# Rust accelerator (prebuilt abi3 wheels); puenteo is fully functional without it
+fast = ["puenteo-core>=0.9"]
 
 [project.urls]
 Homepage = "https://github.com/mano7onam/puenteo"
@@ -61,7 +63,7 @@ asb = "puenteo.cli:main"
 pto = "puenteo.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["puenteo*"]
+include = ["puenteo", "puenteo.*"]
 
 [tool.setuptools.package-data]
 puenteo = ["py.typed", "data/skills/*/SKILL.md", "data/skills/*/*.md", "data/plugin/**/*"]

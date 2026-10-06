@@ -1,0 +1,22 @@
+[package]
+name = "puenteo-core"
+version = "0.9.0"
+edition = "2021"
+description = "Native accelerator for puenteo: fast agent-transcript extraction"
+license = "MIT"
+
+[lib]
+name = "_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.25", features = ["extension-module", "abi3-py39"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+memchr = "2"
+rayon = "1"
+memmap2 = "0.9"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3

@@ -241,3 +241,22 @@ def test_cwd_filter_ignores_relative_session_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert not cwd_matches(str(tmp_path), "-Users-x-dev-other")
     assert cwd_matches("other", "-Users-x-dev-other")
+
+
+def test_native_matches_python(fake_home):
+    """The Rust extractor must produce exactly what the pure-Python parser does."""
+    import puenteo._native as nat
+    from puenteo.providers import list_sessions, load_transcript
+
+    if nat.core is None:
+        pytest.skip("puenteo-core not installed")
+    sessions = [s for s in list_sessions(limit=0) if s.provider in ("codex", "claude_code")]
+    assert sessions
+    for tools in (False, True):
+        fast = {s.path: [(m.role, m.text) for m in load_transcript(s, include_tools=tools).messages] for s in sessions}
+        core, nat.core = nat.core, None
+        try:
+            slow = {s.path: [(m.role, m.text) for m in load_transcript(s, include_tools=tools).messages] for s in sessions}
+        finally:
+            nat.core = core
+        assert fast == slow

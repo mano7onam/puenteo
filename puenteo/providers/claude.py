@@ -198,7 +198,40 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
     sid = session.session_id
     idx = 0
 
-    with open(session.path, "r", encoding="utf-8", errors="replace") as fh:
+    from .._native import core
+
+    rows = None
+    if core is not None:
+        try:
+            rows = core.extract_claude(session.path, include_tools)
+        except OSError:
+            rows = None
+    if rows is not None:
+        for role, text, ts, src in rows:
+            if role == "__title__":
+                cand = clean_title(text, 160)
+                if cand:
+                    title = cand
+                continue
+            mid, rcwd, rsid = (src.split("\t") + ["", "", ""])[:3]
+            cwd = rcwd or cwd
+            sid = rsid or sid
+            text = strip_ansi(text)
+            has_tools = "[tool_use " in text or "[tool_result]" in text
+            if role == "user":
+                text = extract_user_query(text)
+                if is_noise_user_text(text) and not has_tools:
+                    continue
+            if not text.strip():
+                continue
+            if role == "assistant" and mid and messages and messages[-1].meta.get("message_id") == mid:
+                messages[-1].text = (messages[-1].text + "\n" + text).strip()
+                continue
+            messages.append(Message(role=role, text=text, timestamp=ts, index=idx,
+                                    meta={"message_id": mid} if (mid and role == "assistant") else {}))
+            idx += 1
+    else:
+      with open(session.path, "r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
             line = line.strip()
             if not line:

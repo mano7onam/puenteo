@@ -211,6 +211,42 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
     idx = 0
     seen_meta = False
 
+    from .._native import core
+
+    if core is not None:
+        try:
+            rows = core.extract_codex(session.path, include_tools)
+        except OSError:
+            rows = None
+        if rows is not None:
+            for role, text, ts, src in rows:
+                if role == "__meta__":
+                    if not seen_meta:
+                        sid, cwd, seen_meta = src or sid, text or cwd, True
+                    continue
+                if src == "response_item":
+                    if role in ("developer", "system"):
+                        if len(text) > 1500 or not text.strip():
+                            continue
+                        role = "system"
+                    if role == "user" and is_noise_user_text(text):
+                        continue
+                    if not text.strip():
+                        continue
+                    messages.append(Message(role=role, text=text, timestamp=ts, index=idx))
+                elif src == "event_msg":
+                    if role == "user" and is_noise_user_text(text):
+                        continue
+                    if not text.strip():
+                        continue
+                    messages.append(Message(role=role, text=text, timestamp=ts, index=idx, meta={"src": "event_msg"}))
+                else:
+                    messages.append(Message(role=role, text=text, timestamp=ts, index=idx))
+                idx += 1
+                if role == "user" and (not title or str(title).startswith("Codex")) and not _is_boilerplate_title(first_line(text)):
+                    title = first_line(text)
+            return _finish_codex(session, messages, title, cwd, sid)
+
     with open(session.path, "r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
             line = line.strip()
@@ -297,6 +333,10 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
                         if role == "user" and (not title or str(title).startswith("Codex")) and not _is_boilerplate_title(first_line(text)):
                             title = first_line(text)
 
+    return _finish_codex(session, messages, title, cwd, sid)
+
+
+def _finish_codex(session: Session, messages: List[Message], title, cwd, sid) -> Transcript:
     # Codex logs each turn as response_item *and* event_msg (not always adjacent).
     deduped: List[Message] = dedup_mirrored(
         messages,
