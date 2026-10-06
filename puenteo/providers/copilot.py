@@ -81,7 +81,8 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
             continue
         if st.st_size < 200:
             continue
-        meta = _yaml(d / "workspace.yaml")
+        ws = d / "workspace.yaml"
+        meta = cached("copilot.ws", str(ws), lambda: _yaml(ws), stat_path=str(ev))
         scwd = meta.get("cwd") or ""
         if cwd and not cwd_matches(cwd, scwd):
             continue
