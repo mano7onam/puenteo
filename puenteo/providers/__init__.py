@@ -107,6 +107,32 @@ def _warn_provider(name: str, err: Exception) -> None:
     print(f"puenteo: warning: provider {name!r} failed: {err}", file=sys.stderr)
 
 
+_BUILTIN = set(PROVIDERS)
+_plugins_merged = False
+
+
+def _merge_plugins() -> None:
+    """Add third-party providers (entry point ``puenteo.providers``); built-in names can't be overridden."""
+    global _plugins_merged, PROVIDER_NAMES
+    if _plugins_merged:
+        return
+    _plugins_merged = True
+    try:
+        from ..plugins import _report, providers as plugin_providers
+
+        extra = []
+        for name, mod in plugin_providers().items():
+            if name in _BUILTIN or name in PROVIDER_ALIASES:
+                _report(f"puenteo.providers:{name} clashes with a built-in provider; skipped")
+                continue
+            PROVIDERS[name] = mod
+            extra.append(name)
+        if extra:
+            PROVIDER_NAMES = tuple(PROVIDER_NAMES) + tuple(extra)
+    except Exception:
+        pass
+
+
 def normalize_provider_name(name: str) -> str:
     n = (name or "").strip().lower()
     return PROVIDER_ALIASES.get(n, n)
@@ -149,6 +175,7 @@ def list_sessions(
     since: Optional[Union[str, float, int]] = None,
     until: Optional[Union[str, float, int]] = None,
 ) -> List[Session]:
+    _merge_plugins()
     if providers:
         names = []
         for p in providers:
@@ -183,6 +210,7 @@ def list_sessions(
 
 
 def load_transcript(session: Session, *, include_tools: bool = False) -> Transcript:
+    _merge_plugins()
     name = normalize_provider_name(session.provider)
     mod = PROVIDERS.get(name) or PROVIDERS.get(session.provider)
     if not mod:

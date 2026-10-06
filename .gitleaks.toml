@@ -1,0 +1,6 @@
+# Test fixtures contain fake tokens on purpose (redaction tests).
+[extend]
+useDefault = true
+
+[allowlist]
+paths = ['''tests/test_core\.py''', '''tests/test_bus\.py''']

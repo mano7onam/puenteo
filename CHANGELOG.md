@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0 — 2026-10-06
+
+- **Plugins** via entry points: `puenteo.providers`, `puenteo.tools` (MCP), `puenteo.delivery`, `puenteo.live`. Plugins are isolated (a broken one is reported and skipped), can't override built-ins and are versioned (`PUENTEO_API`). Adds `puenteo plugins`, docs/PLUGINS.md and a template plugin.
+- **Contribution gates**: `checks` workflow (zero-dependency + stdlib-only imports, Bandit, gitleaks, DCO sign-off, AI-agent disclosure), CODEOWNERS, CONTRIBUTING, GOVERNANCE with trust levels (area maintainers, including organizations), PR and issue templates.
+- Security: zip export no longer uses `tempfile.mktemp` (race).
+- Dockerfile for MCP directories (passes introspection).
+
 ## 0.9.1 — 2026-10-06
 
 - MCP server re-detects its session lazily and moves a provisional inbox to the real address. Before this, Codex threads that had just started could not receive replies. Verified live with a Claude ↔ Codex ↔ Claude test.

@@ -7,12 +7,12 @@
     "url": "https://github.com/mano7onam/puenteo",
     "source": "github"
   },
-  "version": "0.9.1",
+  "version": "0.10.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "puenteo",
-      "version": "0.9.1",
+      "version": "0.10.0",
       "transport": {
         "type": "stdio"
       },

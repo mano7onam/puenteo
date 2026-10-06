@@ -66,7 +66,9 @@ def push_pending(bus: Bus, msg: BusMessage) -> Dict[str, str]:
             else:
                 results[addr] = f"queued in inbox (codex push failed: {err})"
         else:
-            results[addr] = "queued in inbox"
+            from .plugins import deliver as plugin_deliver
+
+            results[addr] = plugin_deliver(addr, msg) or "queued in inbox"
     return results
 
 

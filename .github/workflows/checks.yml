@@ -1,0 +1,92 @@
+name: checks
+
+# Gates every PR must pass (see CONTRIBUTING.md). Required by branch protection on main.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  zero-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.12" }
+      - name: Core has no runtime dependencies
+        run: |
+          python - <<'PY'
+          import tomllib, sys
+          d = tomllib.load(open("pyproject.toml", "rb"))["project"]
+          if d.get("dependencies"):
+              sys.exit(f"puenteo core must stay dependency-free, found: {d['dependencies']}")
+          PY
+      - name: Imports only the stdlib
+        run: |
+          python - <<'PY'
+          import ast, pathlib, sys
+          std = set(sys.stdlib_module_names) | {"puenteo", "puenteo_core", "__future__"}
+          bad = []
+          for p in pathlib.Path("puenteo").rglob("*.py"):
+              for n in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
+                  mods = [a.name for a in n.names] if isinstance(n, ast.Import) else \
+                         [n.module] if isinstance(n, ast.ImportFrom) and n.level == 0 and n.module else []
+                  bad += [f"{p}: {m}" for m in mods if m.split(".")[0] not in std]
+          if bad:
+              sys.exit("non-stdlib imports in the core:\n" + "\n".join(bad))
+          PY
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.12" }
+      - name: Bandit (medium+ severity and confidence)
+        run: pip install -q bandit && bandit -q -r puenteo -ll -ii
+      - name: gitleaks (secrets in the diff/history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_SUMMARY: "true"
+
+  dco:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - name: Every commit is signed off (Developer Certificate of Origin)
+        run: |
+          missing=0
+          for c in $(git rev-list ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}); do
+            if ! git log -1 --format=%B "$c" | grep -qiE "^Signed-off-by: .+ <.+>"; then
+              echo "::error::commit $(git log -1 --format='%h %s' $c) is missing 'Signed-off-by' (use git commit -s)"
+              missing=1
+            fi
+          done
+          exit $missing
+
+  agent-disclosure:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label AI-agent PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const text = `${pr.title}\n${pr.body || ''}`;
+            const commits = await github.paginate(github.rest.pulls.listCommits, {...context.repo, pull_number: pr.number});
+            const agentish = /co-authored-by: .*(claude|codex|copilot|gemini|cursor|devin|agent)/i;
+            const byAgent = commits.some(c => agentish.test(c.commit.message)) || /🤖|ai agent|agent\/model:/i.test(text);
+            if (byAgent) {
+              await github.rest.issues.addLabels({...context.repo, issue_number: pr.number, labels: ['ai-agent']}).catch(() => {});
+              if (!/responsible human: *@\w+/i.test(text)) {
+                core.setFailed('Agent-authored PR: name the responsible human in the description ("responsible human: @you"), see CONTRIBUTING.md');
+              }
+            }

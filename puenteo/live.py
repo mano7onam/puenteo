@@ -460,6 +460,12 @@ def _native_cached() -> List[LiveSession]:
                 rows.extend(fn())
             except Exception:
                 continue
+        try:
+            from .plugins import live_sessions as plugin_live
+
+            rows.extend(s for s in plugin_live() if isinstance(s, LiveSession))
+        except Exception:
+            pass
         if cache_file is not None:
             try:
                 tmp = cache_file.with_suffix(f".{os.getpid()}.tmp")

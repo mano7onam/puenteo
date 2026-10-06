@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "puenteo-example-plugin"
+version = "0.1.0"
+description = "Template plugin for puenteo: a provider, an MCP tool, a delivery adapter and a live-session detector."
+requires-python = ">=3.9"
+dependencies = ["puenteo>=0.10"]
+
+[project.entry-points."puenteo.providers"]
+notes = "puenteo_example.provider"
+
+[project.entry-points."puenteo.tools"]
+example = "puenteo_example.tools:register"
+
+[project.entry-points."puenteo.delivery"]
+file = "puenteo_example.delivery:push"
+
+[project.entry-points."puenteo.live"]
+notes = "puenteo_example.provider:live_sessions"

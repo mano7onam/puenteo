@@ -127,7 +127,7 @@ def _thread_names() -> dict:
         ]
         if "id" not in want:
             return {}
-        for row in con.execute(f"SELECT {', '.join(want)} FROM threads"):
+        for row in con.execute(f"SELECT {', '.join(want)} FROM threads"):  # nosec B608 - columns from a fixed whitelist
             d = dict(zip(want, row))
             src = d.pop("source", None) or ""
             if isinstance(src, str) and "parent_thread_id" in src:

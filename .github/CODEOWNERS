@@ -1,0 +1,17 @@
+# Default owner for everything
+*                         @mano7onam
+
+# Security-sensitive core: lead maintainer always reviews
+/puenteo/bus.py           @mano7onam
+/puenteo/deliver.py       @mano7onam
+/puenteo/mcp.py           @mano7onam
+/puenteo/server.py        @mano7onam
+/puenteo/install.py       @mano7onam
+/puenteo/redact.py        @mano7onam
+/puenteo/live.py          @mano7onam
+/puenteo/plugins.py       @mano7onam
+/native/                  @mano7onam
+/.github/                 @mano7onam
+
+# Area maintainers: add teams/people here as they join (see GOVERNANCE.md), e.g.
+# /puenteo/providers/cursor.py   @mano7onam @some-org/cursor-team

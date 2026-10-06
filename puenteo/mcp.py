@@ -54,6 +54,8 @@ class Server:
         self.tools: Dict[str, Dict[str, Any]] = {}
         self.handlers: Dict[str, Callable[[Dict[str, Any]], Any]] = {}
         self._register_tools()
+        self._builtin_tools = set(self.tools)
+        self._register_plugin_tools()
 
     # ------------------------------------------------------------------ identity
     def identity(self) -> str:
@@ -133,6 +135,11 @@ class Server:
     # ------------------------------------------------------------------ tools
     def tool(self, name: str, description: str, schema: Dict[str, Any], *, read_only: bool = True):
         def deco(fn):
+            if name in getattr(self, "_builtin_tools", ()):
+                from .plugins import _report
+
+                _report(f"puenteo.tools: tool {name!r} clashes with a built-in tool; skipped")
+                return fn
             self.tools[name] = {
                 "name": name,
                 "description": description,
@@ -143,6 +150,16 @@ class Server:
             return fn
 
         return deco
+
+    def _register_plugin_tools(self) -> None:
+        from .plugins import register_tools
+
+        builtin = set(self.tools)
+        added = register_tools(self)
+        for name in added:
+            if name in builtin:  # pragma: no cover - register_tools only reports new names
+                continue
+            self.tools[name]["annotations"]["plugin"] = True
 
     def _register_tools(self) -> None:  # noqa: C901 - flat list of small handlers
         from . import extract

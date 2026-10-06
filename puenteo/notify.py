@@ -34,8 +34,10 @@ def _bell_dir() -> Path:
     # AF_UNIX paths are limited to ~104 bytes on macOS; fall back to a short tmp dir.
     if len(str(d)) > 80:
         uid = os.getuid() if hasattr(os, "getuid") else 0
-        d = Path(tempfile.gettempdir() if len(tempfile.gettempdir()) < 40 else "/tmp") / f"puenteo-{uid}" / hashlib.sha1(
-            str(state_dir()).encode()).hexdigest()[:8]
+        # per-uid dir, chmod 0700 below; only used when the state dir path is too long for AF_UNIX
+        base = tempfile.gettempdir() if len(tempfile.gettempdir()) < 40 else "/tmp"  # nosec B108
+        tag = hashlib.sha1(str(state_dir()).encode(), usedforsecurity=False).hexdigest()[:8]
+        d = Path(base) / f"puenteo-{uid}" / tag
     d.mkdir(parents=True, exist_ok=True)
     try:
         os.chmod(d, 0o700)
@@ -45,7 +47,7 @@ def _bell_dir() -> Path:
 
 
 def _name(address: str) -> str:
-    return hashlib.sha1(address.encode("utf-8")).hexdigest()[:20]
+    return hashlib.sha1(address.encode("utf-8"), usedforsecurity=False).hexdigest()[:20]
 
 
 class Bell:

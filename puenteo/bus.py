@@ -616,7 +616,7 @@ class Bus:
         now = time.time()
         if msgs:
             self.con.execute(
-                f"UPDATE deliveries SET delivered=COALESCE(delivered, ?) WHERE address=? AND msg_seq IN ({','.join('?' * len(msgs))})",
+                f"UPDATE deliveries SET delivered=COALESCE(delivered, ?) WHERE address=? AND msg_seq IN ({','.join('?' * len(msgs))})",  # nosec B608 - placeholders only
                 [now, a, *[m.seq for m in msgs]],
             )
             if mark_read:
@@ -629,7 +629,7 @@ class Bus:
         if not seqs:
             return
         self.con.execute(
-            f"UPDATE deliveries SET read=COALESCE(read, ?) WHERE address=? AND msg_seq IN ({','.join('?' * len(seqs))})",
+            f"UPDATE deliveries SET read=COALESCE(read, ?) WHERE address=? AND msg_seq IN ({','.join('?' * len(seqs))})",  # nosec B608 - placeholders only
             [time.time(), normalize_address(address), *seqs],
         )
 
@@ -782,7 +782,7 @@ class Bus:
         cutoff = time.time() - older_than_days * 86400
         seqs = [r[0] for r in self.con.execute("SELECT seq FROM messages WHERE created<?", (cutoff,))]
         if seqs:
-            self.con.execute(f"DELETE FROM deliveries WHERE msg_seq IN ({','.join('?' * len(seqs))})", seqs)
+            self.con.execute(f"DELETE FROM deliveries WHERE msg_seq IN ({','.join('?' * len(seqs))})", seqs)  # nosec B608 - placeholders only
             self.con.execute("DELETE FROM messages WHERE created<?", (cutoff,))
         self.con.execute("DELETE FROM peers WHERE last_seen<? AND (pid IS NULL OR pid=0)", (cutoff,))
         return len(seqs)

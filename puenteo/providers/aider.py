@@ -105,7 +105,7 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
         proj = os.path.dirname(path)
         if cwd and not cwd_matches(cwd, proj):
             continue
-        sid = hashlib.sha1(path.encode()).hexdigest()[:16]
+        sid = hashlib.sha1(path.encode(), usedforsecurity=False).hexdigest()[:16]
         title = _peek_title(path) or f"Aider {os.path.basename(proj)}"
         out.append(
             Session(
@@ -127,7 +127,7 @@ def session_from_path(path: str) -> Optional[Session]:
     if not os.path.isfile(path):
         return None
     st = os.stat(path)
-    sid = hashlib.sha1(path.encode()).hexdigest()[:16]
+    sid = hashlib.sha1(path.encode(), usedforsecurity=False).hexdigest()[:16]
     return Session(
         provider="aider",
         session_id=sid,

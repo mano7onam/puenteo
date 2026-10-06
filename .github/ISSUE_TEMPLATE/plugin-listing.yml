@@ -1,0 +1,30 @@
+name: Plugin listing
+description: Get your puenteo plugin listed in the README
+labels: [plugin]
+body:
+  - type: input
+    id: repo
+    attributes: { label: Repository / PyPI package, placeholder: "github.com/you/puenteo-cline · pip install puenteo-cline" }
+    validations: { required: true }
+  - type: checkboxes
+    id: kinds
+    attributes:
+      label: What it adds
+      options:
+        - label: provider (puenteo.providers)
+        - label: MCP tools (puenteo.tools)
+        - label: delivery (puenteo.delivery)
+        - label: live detection (puenteo.live)
+  - type: textarea
+    id: what
+    attributes: { label: What it does, description: One paragraph. Which agent/tool, what users get. }
+    validations: { required: true }
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Plugin rules (docs/PLUGINS.md)
+      options:
+        - label: Reads other agents' stores read-only and never reads credential files
+          required: true
+        - label: Has tests that don't need real user data
+          required: true

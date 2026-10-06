@@ -183,6 +183,12 @@ Live detection (`ps`) covers Claude Code (`~/.claude/sessions`), Codex (thread l
 | Message bus | `~/Library/Application Support/puenteo/bus.db` · `~/.local/state/puenteo` · `%LOCALAPPDATA%\puenteo\State` | `PUENTEO_BUS` |
 | Identity | detected automatically | `PUENTEO_SESSION=agent:id`, `--as` |
 
+## Extend it
+
+New agent store, MCP tool, delivery channel (Slack, IDE…) or live detector? Write a **plugin**. It's an ordinary package with entry points, and you don't have to fork anything. See [docs/PLUGINS.md](docs/PLUGINS.md) and the template in [`examples/puenteo-example-plugin`](examples/puenteo-example-plugin). Run `puenteo plugins` to see what's loaded.
+
+Contributions to the core, from individuals, companies and AI agents, go through the same gates: CI on 3 OSes, a zero-dependency check, a security scan, DCO sign-off and code-owner review. See [CONTRIBUTING.md](CONTRIBUTING.md) and [GOVERNANCE.md](GOVERNANCE.md).
+
 ## Development
 
 ```bash

@@ -364,9 +364,11 @@ def _to_json_obj(t: Transcript) -> Dict[str, Any]:
 
 def _to_zip_bundle(t: Transcript, *, include_tools: bool, include_thinking: bool) -> bytes:
     """Full fidelity: md + html + json + extracted image/files."""
-    buf_path = tempfile.mktemp(suffix=".zip")
-    try:
-        with zipfile.ZipFile(buf_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    import io
+
+    buf = io.BytesIO()  # in memory: no temp-file race (was tempfile.mktemp)
+    if True:
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("conversation.md", _to_md(t, include_tools=include_tools, include_thinking=include_thinking))
             zf.writestr("conversation.html", _to_html(t, include_tools=include_tools, include_thinking=include_thinking))
             zf.writestr("conversation.txt", _to_txt(t, include_tools=include_tools, include_thinking=include_thinking))
@@ -404,13 +406,7 @@ def _to_zip_bundle(t: Transcript, *, include_tools: bool, include_thinking: bool
                     elif a.text:
                         file_i += 1
                         zf.writestr(f"assets/files/{file_i:03d}-{_slug(a.name or 'note')}.txt", a.text)
-        with open(buf_path, "rb") as f:
-            return f.read()
-    finally:
-        try:
-            os.remove(buf_path)
-        except OSError:
-            pass
+        return buf.getvalue()
 
 
 def _to_pdf(t: Transcript, *, include_tools: bool, include_thinking: bool) -> bytes:

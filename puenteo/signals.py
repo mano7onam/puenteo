@@ -252,7 +252,7 @@ def _from_text(session: Session) -> Signals:
     tr = load_transcript(session, include_tools=True)
     for m in tr.messages:
         for p in _PATH_RE.findall(m.text or ""):
-            if not p.startswith(("/tmp/", "/var/", "/private/", "/dev/")):
+            if not p.startswith(("/tmp/", "/var/", "/private/", "/dev/")):  # nosec B108 - path filter, not a file write
                 sig.touch(p, "mentioned", m.timestamp)
         for cmd in re.findall(r"git commit[^\n`]*", m.text or ""):
             sig.command(cmd, None, m.timestamp)

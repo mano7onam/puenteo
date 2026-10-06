@@ -1,0 +1,14 @@
+name: Bug report
+description: Something doesn't work
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: What happened, description: "Command, expected vs actual output. Remove secrets and private transcript content." }
+    validations: { required: true }
+  - type: textarea
+    id: doctor
+    attributes: { label: "`puenteo doctor` output", render: text }
+  - type: input
+    id: env
+    attributes: { label: "OS / Python / agents involved", placeholder: "macOS 26, Python 3.12, Claude Code 2.1 + Codex 0.149" }

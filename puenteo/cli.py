@@ -286,6 +286,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--open", action="store_true", help="Open the dashboard in a browser")
     sp.add_argument("--print-token", action="store_true", help="Print the bearer token and exit")
 
+    sp = sub.add_parser("plugins", help="List installed puenteo plugins (providers, MCP tools, delivery, live)")
+    _common_flags(sp)
+
     sp = sub.add_parser("guard", help="Git pre-commit guard against committing files a peer has claimed")
     sp.add_argument("action", choices=["install", "uninstall", "check"])
     sp.add_argument("--repo", default=".")
@@ -366,6 +369,26 @@ def _main(args, parser, providers) -> int:
             from .mcp import main as mcp_main
 
             return mcp_main(args.mcp_args)
+
+        if args.cmd == "plugins":
+            from . import plugins as pl
+            from .providers import _merge_plugins
+
+            _merge_plugins()
+            rows = pl.describe()
+            if json_mode:
+                import json as _json
+
+                print(_json.dumps({"api_version": pl.API_VERSION, "plugins": rows, "errors": pl.errors()}, indent=2))
+            else:
+                print(f"plugin API v{pl.API_VERSION}")
+                for r in rows or []:
+                    print(f"  {r['group']:18} {r['name']:16} {r['package']} {r['version']}")
+                if not rows:
+                    print("  (none installed; see docs/PLUGINS.md)")
+                for e in pl.errors():
+                    print(f"  ! {e}")
+            return 1 if pl.errors() else 0
 
         if args.cmd == "guard":
             from . import guard

@@ -346,8 +346,11 @@ def _run(cmd: str, args, *, json_mode: bool, cwd, providers) -> int:
                 env = dict(os.environ, PUENTEO_FROM=m.sender, PUENTEO_ID=m.id, PUENTEO_TO=m.to,
                            PUENTEO_THREAD=m.thread, PUENTEO_BODY=m.body[:30000])
                 try:
-                    subprocess.run(args.exec_cmd, shell=True, input=json.dumps(m.to_dict(), ensure_ascii=False),
-                                   text=True, env=env, timeout=300)
+                    # the user's own command line by design (`watch --exec`); message data goes via stdin/env, never the command string
+                    subprocess.run(  # nosec B602
+                        args.exec_cmd, shell=True, input=json.dumps(m.to_dict(), ensure_ascii=False),
+                        text=True, env=env, timeout=300,
+                    )
                 except Exception as e:
                     print(f"puenteo watch --exec: {e}", file=sys.stderr)
         n = watch(me, bus=bus, poll=args.interval, timeout=args.timeout, once=args.once,
