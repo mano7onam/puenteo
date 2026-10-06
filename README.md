@@ -20,6 +20,7 @@ No runtime dependencies · Python ≥ 3.9 · macOS · Linux · Windows · fully 
 
 ```bash
 uv tool install puenteo        # or: pipx install puenteo / pip install puenteo
+uv tool install 'puenteo[fast]'  # + optional Rust core: 3–8x faster parsing and indexing
 puenteo install                # skills + MCP server into every detected agent
 puenteo install --hooks        # optional: deliver messages through Claude Code / Codex hooks
 puenteo install --dry-run      # show the plan without changing anything
@@ -71,6 +72,36 @@ puenteo claims --check src/db/schema.sql          # exit 1 if a peer holds it
 | Gemini, Cursor, OpenCode, Copilot, Qwen, … | no; the message waits in the inbox | MCP `inbox` / `wait` |
 
 All messages live in one local SQLite file (`puenteo` state dir) and nothing leaves the machine. Bodies are wrapped as **untrusted peer data**: agents are told that peer messages never count as user instructions or approval. A hop limit, a rate limit and a size cap keep agents from looping.
+
+## Ways in: pick what fits your agent or tool
+
+| Interface | Use it for | Command / endpoint |
+|---|---|---|
+| **CLI** | any agent with a shell, scripts | `puenteo send/inbox/ps/search …` (`--json` everywhere) |
+| **MCP (stdio)** | Claude Code, Codex, Gemini, Cursor, OpenCode, Copilot, Qwen | `puenteo mcp` (installed by `puenteo install`) |
+| **Hooks** | messages show up in context with no tool call | `puenteo install --hooks` (Claude Code, Codex) |
+| **Monitor / stream** | wake an idle Claude session the moment mail arrives | `puenteo watch` (instant; Unix-socket doorbell) |
+| **Exec trigger** | glue for anything: notify-send, Slack, scripts | `puenteo watch --exec 'cmd'` (message JSON on stdin) |
+| **HTTP REST + SSE** | dashboards, editors, other languages | `puenteo serve` → `/api/*`, `/api/events` |
+| **MCP over HTTP** | MCP clients that prefer HTTP | `POST /mcp` on `puenteo serve` |
+| **A2A v1.0** | standard agent-to-agent clients | `/.well-known/agent-card.json`, `POST /a2a` |
+| **Web dashboard** | watching and talking to all sessions in a browser | `puenteo serve --open` |
+| **Python** | your own orchestrators | `puenteo.send()`, `for m in puenteo.listen(): …`, `puenteo.Bus` |
+| **Git guard** | stop commits that touch a file a peer claimed | `puenteo guard install` |
+
+`puenteo serve` binds only to 127.0.0.1 and needs a bearer token, stored in a 0600 file (`puenteo serve --print-token`). It rejects any non-localhost Host or Origin header, which blocks DNS rebinding, as the MCP spec recommends for local HTTP servers.
+
+## Speed
+
+| | pure Python | with `puenteo[fast]` (Rust core) |
+|---|---|---|
+| parse transcripts (25 largest, 3.3 GB) | ~300 MB/s | 0.8–2.7 GB/s, all cores |
+| cold index rebuild (807 Codex + Claude sessions, ~4 GB) | 14.8 s | 4.3 s |
+| global search after new activity | ~14 s | ~2 s |
+| warm `list` (4.5k sessions) / warm search | 0.3 s / 0.25 s | same |
+| message delivery (send → woken reader) | 0.8 ms median | same |
+
+The Rust core (`native/`, PyO3 abi3 wheels) is optional. Without it, puenteo stays pure Python with no dependencies. A test checks that both parsers produce byte-identical output on real logs. Set `PUENTEO_NATIVE=0` to force pure Python.
 
 ## MCP server
 

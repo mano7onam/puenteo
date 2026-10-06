@@ -1,6 +1,6 @@
 {
   "name": "puenteo",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Bridge between coding-agent sessions: search history of every local agent (Claude, Codex, Gemini, Cursor, …) and message sessions running right now.",
   "mcpServers": {
     "puenteo": {

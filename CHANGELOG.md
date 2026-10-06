@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0 — 2026-10-06
+
+- **Instant delivery**: Unix-socket doorbells replace polling in send/wait/watch/log/SSE (0.8 ms median).
+- **`puenteo serve`**: local HTTP gateway with a live dashboard, REST, SSE, MCP over HTTP, and an A2A v1.0 facade (agent card + JSON-RPC `SendMessage`/`GetTask`). Loopback only, token auth, Host/Origin checks.
+- **Rust core** (`puenteo-core`, optional `puenteo[fast]`): byte-level JSONL routing and parallel parsing. Output is identical to the Python parser. Cold index 3.5x faster.
+- `watch --exec`, `puenteo.listen()` streaming API, `puenteo guard` git pre-commit claim guard.
+- Review fixes: transactional inbox/claims, frame-forgery-proof message rendering, redaction before JSON escaping, Windows-safe hook/MCP output, safer `install` (symlinks, modes, foreign skills, JSONC).
+
 ## 0.8.0 — 2026-10-06
 
 **Live sessions talk to each other.**
