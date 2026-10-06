@@ -47,6 +47,7 @@ class Server:
         self._out_lock = threading.Lock()
         self._stop = threading.Event()
         self.me = me
+        self._provisional = False
         self.me_name = name
         self.join_channels = channels or []
         self.client: Dict[str, Any] = {}
@@ -56,20 +57,50 @@ class Server:
 
     # ------------------------------------------------------------------ identity
     def identity(self) -> str:
-        if self.me:
+        """
+        Our bus address. If the host agent can't be identified yet (Codex creates
+        its rollout file only after the first turn starts), use a provisional
+        address and keep re-detecting; once found, move the inbox over.
+        """
+        if self.me and not self._provisional:
             return self.me
-        from .live import whoami
+        from .live import _whoami_cache, whoami
 
+        _whoami_cache.clear()
         w = whoami()
         if w:
-            self.me = w.address
-            self.me_cwd = w.cwd
-        else:
-            # Unknown host agent: still usable for history + sending; give it a stable address.
+            old = self.me if self._provisional else None
+            self.me, self.me_cwd, self._provisional = w.address, w.cwd, False
+            if old and old != self.me:
+                self._adopt(old)
+            return self.me
+        if not self.me:
             agent = (self.client.get("name") or "mcp").split()[0].lower().replace("-", "_")
+            if agent.startswith("codex"):
+                agent = "codex"
             self.me = f"{agent}:pid{os.getppid()}"
             self.me_cwd = os.getcwd()
+            self._provisional = True
         return self.me
+
+    def _adopt(self, old: str) -> None:
+        """Move deliveries, subscriptions, claims and name from a provisional address to the real one."""
+        from .bus import Bus
+
+        try:
+            with Bus() as b:
+                with b._tx():
+                    b.con.execute("UPDATE OR IGNORE deliveries SET address=? WHERE address=?", (self.me, old))
+                    b.con.execute("UPDATE OR IGNORE subscriptions SET address=? WHERE address=?", (self.me, old))
+                    b.con.execute("UPDATE claims SET holder=? WHERE holder=?", (self.me, old))
+                    b.con.execute("UPDATE messages SET sender=? WHERE sender=?", (self.me, old))
+                    row = b.con.execute("SELECT name FROM peers WHERE address=?", (old,)).fetchone()
+                    b.con.execute("DELETE FROM peers WHERE address=?", (old,))
+                b.register(self.me, name=(row[0] if row else "") or self.me_name, cwd=self.me_cwd or "",
+                           pid=os.getppid(), via="mcp")
+            self._log(f"identified as {self.me} (was {old})")
+        except Exception as e:
+            self._log(f"adopt {old} -> {self.me} failed: {e}")
 
     def _join(self) -> None:
         from .bus import Bus, BusError

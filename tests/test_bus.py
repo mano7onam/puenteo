@@ -296,3 +296,22 @@ def test_watch_exec(bus, tmp_path):
     rc = main(["watch", "--as", "codex:aaaa1111", "--once", "--timeout", "2",
                "--exec", f'echo "$PUENTEO_FROM:$PUENTEO_BODY" > {out}'])
     assert rc == 0 and out.read_text().strip() == "claude:bbbb2222:exec me"
+
+
+def test_mcp_provisional_identity_is_adopted(bus, monkeypatch):
+    """Codex creates its rollout only after the first turn: the MCP server must re-detect and move its inbox."""
+    from puenteo import live
+    from puenteo.mcp import Server
+
+    answers = iter([None, None, live.Me(agent="codex", session_id="real-thread-1", cwd="/x")])
+    monkeypatch.setattr(live, "whoami", lambda **kw: next(answers, live.Me(agent="codex", session_id="real-thread-1", cwd="/x")))
+    srv = Server()
+    srv.client = {"name": "codex-mcp-client"}
+    tmp = srv.identity()
+    assert tmp.startswith("codex:pid")
+    bus.register(tmp, name="beta", via="mcp")
+    bus.send("claude:bbbb2222", "@beta", "early message")
+    assert srv.identity() == tmp  # still unknown
+    assert srv.identity() == "codex:real-thread-1"
+    assert [m.body for m in bus.inbox("codex:real-thread-1")] == ["early message"]
+    assert bus.peer("codex:real-thread-1").name == "beta" and bus.peer(tmp) is None
