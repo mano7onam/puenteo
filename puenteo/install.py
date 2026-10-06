@@ -43,9 +43,15 @@ def mcp_command() -> List[str]:
     return [sys.executable, "-m", "puenteo", "mcp"]
 
 
+HOOK_MARK = "PUENTEO_HOOK=1"
+
+
 def hook_command(event: str, agent: str) -> str:
     base = mcp_command()[:-1]  # drop "mcp"
-    return " ".join(_q(x) for x in [*base, "hook", event, "--agent", agent])
+    args = [*base, "hook", event, "--agent", agent]
+    if sys.platform == "win32":
+        return subprocess.list2cmdline(args)
+    return HOOK_MARK + " " + " ".join(_q(x) for x in args)
 
 
 def _q(s: str) -> str:
@@ -56,17 +62,27 @@ def _q(s: str) -> str:
 
 
 def _backup(path: Path) -> None:
+    """Keep the pristine pre-puenteo copy, plus a backup of the state before *this* run."""
     if path.exists():
         bak = path.with_name(path.name + ".puenteo-bak")
         if not bak.exists():
             shutil.copy2(path, bak)
+        shutil.copy2(path, path.with_name(path.name + ".puenteo-prev"))
 
 
 def _atomic_write(path: Path, text: str) -> None:
+    # Write through symlinks (dotfile managers) and keep the original file mode.
+    path = Path(os.path.realpath(path))
     path.parent.mkdir(parents=True, exist_ok=True)
+    mode = None
+    try:
+        mode = path.stat().st_mode & 0o7777
+    except OSError:
+        pass
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.")
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(text)
+    os.chmod(tmp, mode if mode is not None else 0o644)
     os.replace(tmp, path)
 
 
@@ -78,10 +94,9 @@ def _load_json(path: Path) -> dict:
         return {}
     try:
         return json.loads(raw)
-    except json.JSONDecodeError:
-        # tolerate // comments (jsonc) — strip line comments not inside strings, best effort
-        stripped = re.sub(r'(?m)^\s*//.*$', "", raw)
-        return json.loads(stripped)
+    except json.JSONDecodeError as e:
+        # JSONC (comments / trailing commas): we refuse rather than silently drop the user's comments
+        raise ValueError(f"{path} is not plain JSON ({e.msg}); add the puenteo entry by hand") from None
 
 
 def _edit_json(path: Path, fn: Callable[[dict], bool], dry: bool) -> bool:
@@ -212,10 +227,15 @@ def _claude_hooks(path: Path, agent: str = "claude") -> Callable[[bool, bool], S
 
 
 def _is_ours(group: dict) -> bool:
-    for h in (group or {}).get("hooks", []) or []:
-        if " hook " in f" {h.get('command', '')} " and "puenteo" in h.get("command", ""):
-            return True
-    return False
+    """Only groups whose every hook is a puenteo hook command we generated."""
+    hooks = (group or {}).get("hooks", []) or []
+    if not hooks:
+        return False
+    for h in hooks:
+        cmd = str(h.get("command", ""))
+        if not (cmd.startswith(HOOK_MARK) or re.search(r"puenteo(?:\.exe)?\"?\s+hook\s+(SessionStart|UserPromptSubmit|PostToolUse|Stop)\s+--agent\s", cmd)):
+            return False
+    return True
 
 
 def agents() -> List[Agent]:
@@ -282,8 +302,12 @@ def _install_skill(dest_root: Path, name: str, dry: bool, remove: bool) -> str:
         if not dry:
             dest.unlink()  # dangling link from an old checkout (agent-session-bridge, …)
         status = "replaced broken symlink"
-    elif dest.is_symlink() or (dest.exists() and not _owned(dest) and dest.is_dir()):
+    elif dest.is_symlink():
+        if not _owned(dest):
+            return "skipped: foreign symlink"
         status = "updated"
+    elif dest.exists() and not _owned(dest):
+        return "skipped: exists, not installed by puenteo"
     elif dest.exists():
         if (dest / "SKILL.md").read_bytes() == (src / "SKILL.md").read_bytes():
             return "unchanged"

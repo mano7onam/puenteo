@@ -240,7 +240,7 @@ class Server:
                 out: Dict[str, Any] = {"id": m.id, "thread": m.thread, "recipients": m.meta.get("recipients"),
                                        "delivery": delivery}
                 if a.get("wait_s"):
-                    got = b.wait(self.identity(), timeout=float(a["wait_s"]), thread=m.thread)
+                    got = b.wait(self.identity(), timeout=min(float(a["wait_s"]), 600.0), thread=m.thread)
                     out["replies"] = [format_message(x) for x in got]
                 return out
 
@@ -254,7 +254,7 @@ class Server:
                 out: Dict[str, Any] = {"id": m.id, "thread": m.thread, "recipients": m.meta.get("recipients"),
                                        "delivery": push_pending(b, m)}
                 if a.get("wait_s"):
-                    out["replies"] = [format_message(x) for x in b.wait(self.identity(), timeout=float(a["wait_s"]), thread=m.thread)]
+                    out["replies"] = [format_message(x) for x in b.wait(self.identity(), timeout=min(float(a["wait_s"]), 600.0), thread=m.thread)]
                 return out
 
         @self.tool("inbox", "Read messages other sessions sent you (marks them read).",
@@ -331,7 +331,7 @@ class Server:
 
     # ------------------------------------------------------------------ protocol
     def _write(self, obj: Dict[str, Any]) -> None:
-        line = json.dumps(obj, ensure_ascii=False)
+        line = json.dumps(obj, ensure_ascii=True)  # safe on any stdout encoding (Windows cp1252)
         with self._out_lock:
             sys.stdout.write(line + "\n")
             sys.stdout.flush()
@@ -357,6 +357,14 @@ class Server:
             self._log(traceback.format_exc())
             return {"jsonrpc": "2.0", "id": rid, "error": {"code": -32603, "message": str(e)}}
 
+    def _handle_and_write(self, r: Dict[str, Any]) -> None:
+        try:
+            resp = self.handle(r)
+        except Exception as e:  # pragma: no cover - last line of defence
+            resp = {"jsonrpc": "2.0", "id": r.get("id"), "error": {"code": -32603, "message": str(e)}}
+        if resp is not None:
+            self._write(resp)
+
     def _dispatch(self, method: str, params: Dict[str, Any]) -> Any:
         if method == "initialize":
             self.client = params.get("clientInfo") or {}
@@ -379,11 +387,11 @@ class Server:
                 raise _RpcError(-32602, f"unknown tool: {name}")
             try:
                 data = fn(params.get("arguments") or {})
-                text = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, indent=1, default=str)
-                from .redact import enabled_by_default, redact
+                from .redact import enabled_by_default
 
                 if enabled_by_default():
-                    text = redact(text)
+                    data = _redact_tree(data)
+                text = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, indent=1, default=str)
                 return {"content": [{"type": "text", "text": text}], "isError": False}
             except Exception as e:
                 return {"content": [{"type": "text", "text": f"error: {e}"}], "isError": True}
@@ -407,11 +415,29 @@ class Server:
                 continue
             reqs = req if isinstance(req, list) else [req]
             for r in reqs:
-                resp = self.handle(r)
-                if resp is not None:
-                    self._write(resp)
+                if not isinstance(r, dict):
+                    self._write({"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "invalid request"}})
+                    continue
+                if r.get("method") == "tools/call" and r.get("id") is not None:
+                    # tools may block (wait, search on a cold index): never stall the read loop
+                    threading.Thread(target=self._handle_and_write, args=(r,), daemon=True).start()
+                    continue
+                self._handle_and_write(r)
         self._stop.set()
         return 0
+
+
+def _redact_tree(obj: Any) -> Any:
+    """Redact every string *before* JSON escaping (escaped quotes defeat the patterns)."""
+    from .redact import redact
+
+    if isinstance(obj, str):
+        return redact(obj)
+    if isinstance(obj, list):
+        return [_redact_tree(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _redact_tree(v) for k, v in obj.items()}
+    return obj
 
 
 class _RpcError(Exception):

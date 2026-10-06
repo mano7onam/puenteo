@@ -21,8 +21,10 @@ Safety rails: body size cap, per-sender rate limit, hop counter on replies.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import re
 import sqlite3
 import time
 import uuid
@@ -124,6 +126,16 @@ class Claim:
         return d
 
 
+_ADDR_RE = re.compile(r"^[\w.:@#*/~+=-]{1,300}$")
+
+
+def check_address(addr: str) -> str:
+    """Addresses are interpolated into agent context; keep them to a safe charset."""
+    if not addr or not _ADDR_RE.match(addr):
+        raise BusError(f"invalid address/id {addr!r}: use letters, digits and . : @ # * / ~ + = - _")
+    return addr
+
+
 def normalize_address(addr: str) -> str:
     """``claude_code:x`` → ``claude:x``; agent aliases folded; trims spaces."""
     a = (addr or "").strip()
@@ -148,6 +160,7 @@ class Bus:
     def __init__(self, path: Optional[str] = None):
         self.path = str(path or bus_db_path())
         self._con: Optional[sqlite3.Connection] = None
+        self._depth = 0
 
     # ------------------------------------------------------------------ db
     @property
@@ -159,6 +172,27 @@ class Bus:
             self._migrate(con)
             self._con = con
         return self._con
+
+    @contextlib.contextmanager
+    def _tx(self):
+        """Serialize a read-modify-write across processes (BEGIN IMMEDIATE takes the write lock)."""
+        if self._depth:
+            self._depth += 1
+            try:
+                yield
+            finally:
+                self._depth -= 1
+            return
+        self.con.execute("BEGIN IMMEDIATE")
+        self._depth = 1
+        try:
+            yield
+        except BaseException:
+            self._depth = 0
+            self.con.execute("ROLLBACK")
+            raise
+        self._depth = 0
+        self.con.execute("COMMIT")
 
     def close(self) -> None:
         if self._con is not None:
@@ -189,6 +223,7 @@ class Bus:
             );
             CREATE INDEX IF NOT EXISTS messages_recipient ON messages(recipient, seq);
             CREATE INDEX IF NOT EXISTS messages_thread ON messages(thread, seq);
+            CREATE INDEX IF NOT EXISTS messages_sender ON messages(sender, created);
             CREATE TABLE IF NOT EXISTS deliveries (
                 msg_seq INTEGER NOT NULL, address TEXT NOT NULL,
                 delivered REAL, read REAL, pushed TEXT,
@@ -218,9 +253,13 @@ class Bus:
         via: str = "api",
         meta: Optional[Dict[str, Any]] = None,
     ) -> Peer:
-        address = normalize_address(address)
+        address = check_address(normalize_address(address))
         if ":" not in address or address[0] in "@#*":
             raise BusError(f"peer address must be agent:session_id, got {address!r}")
+        with self._tx():
+            return self._register(address, name=name, cwd=cwd, pid=pid, via=via, meta=meta)
+
+    def _register(self, address, *, name, cwd, pid, via, meta) -> Peer:
         agent, sid = address.split(":", 1)
         now = time.time()
         name = (name or "").strip().lstrip("@")
@@ -437,7 +476,24 @@ class Bus:
         kind: str = "message",
         meta: Optional[Dict[str, Any]] = None,
     ) -> BusMessage:
-        sender = normalize_address(sender) or "user:cli"
+        return self._send(sender, to, body, thread=thread, reply_to=reply_to, kind=kind, meta=meta)
+
+    def _send(
+        self,
+        sender: str,
+        to: str,
+        body: str,
+        *,
+        thread: str = "",
+        reply_to: str = "",
+        kind: str = "message",
+        meta: Optional[Dict[str, Any]] = None,
+    ) -> BusMessage:
+        sender = check_address(normalize_address(sender) or "user:cli")
+        if to:
+            check_address(normalize_address(to))
+        if thread:
+            check_address(thread)
         body = body or ""
         if not body.strip():
             raise BusError("empty message")
@@ -445,13 +501,6 @@ class Bus:
             raise BusError(
                 f"message too long ({len(body)} > {MAX_BODY} chars); send a session ref or file path instead"
             )
-        now = time.time()
-        n_recent = self.con.execute(
-            "SELECT COUNT(*) FROM messages WHERE sender=? AND created>?", (sender, now - RATE_WINDOW_S)
-        ).fetchone()[0]
-        if n_recent >= RATE_MAX:
-            raise BusError(f"rate limit: {sender} sent {n_recent} messages in {RATE_WINDOW_S // 60} min")
-
         hops = 0
         if reply_to:
             parent = self.get(reply_to)
@@ -467,8 +516,19 @@ class Bus:
         to = normalize_address(to)
         if to.startswith("#"):
             self.subscribe(sender, to)  # posting to a channel joins it
-        recipients = self.resolve(to, sender=sender)
+        recipients = self.resolve(to, sender=sender)  # may scan processes: keep it outside the write lock
 
+        with self._tx():
+            return self._insert(sender, to, body, recipients, thread=thread, reply_to=reply_to,
+                                kind=kind, hops=hops, meta=meta)
+
+    def _insert(self, sender, to, body, recipients, *, thread, reply_to, kind, hops, meta) -> BusMessage:
+        now = time.time()
+        n_recent = self.con.execute(
+            "SELECT COUNT(*) FROM messages WHERE sender=? AND created>?", (sender, now - RATE_WINDOW_S)
+        ).fetchone()[0]
+        if n_recent >= RATE_MAX:
+            raise BusError(f"rate limit: {sender} sent {n_recent} messages in {RATE_WINDOW_S // 60} min")
         mid = uuid.uuid4().hex[:12]
         cur = self.con.execute(
             "INSERT INTO messages(id, sender, recipient, thread, reply_to, kind, body, created, hops, meta)"
@@ -489,12 +549,15 @@ class Bus:
     def get(self, msg_id: str) -> Optional[BusMessage]:
         row = self.con.execute(
             "SELECT seq, id, sender, recipient, thread, reply_to, kind, body, created, hops, meta"
-            " FROM messages WHERE id=? OR id LIKE ? ORDER BY seq DESC LIMIT 2",
-            (msg_id, msg_id + "%"),
+            " FROM messages WHERE id=? OR substr(id, 1, ?)=? ORDER BY seq DESC LIMIT 2",
+            (msg_id, len(msg_id), msg_id),
         ).fetchall()
         if not row:
             return None
-        return self._msg(row[0])
+        exact = [r for r in row if r[1] == msg_id]
+        if not exact and len(row) > 1:
+            raise BusError(f"ambiguous message id {msg_id!r}; use more characters")
+        return self._msg((exact or row)[0])
 
     @staticmethod
     def _msg(row, read: bool = False) -> BusMessage:
@@ -517,9 +580,15 @@ class Bus:
         mark_read: bool = True,
         limit: int = 50,
         after_seq: int = 0,
+        thread: Optional[str] = None,
     ) -> List[BusMessage]:
         """Messages addressed to ``address`` (directly or via @name/#channel/broadcast)."""
         a = normalize_address(address)
+        with self._tx():
+            return self._inbox(a, unread_only=unread_only, mark_read=mark_read, limit=limit,
+                               after_seq=after_seq, thread=thread)
+
+    def _inbox(self, a, *, unread_only, mark_read, limit, after_seq, thread) -> List[BusMessage]:
         q = (
             "SELECT m.seq, m.id, m.sender, m.recipient, m.thread, m.reply_to, m.kind, m.body, m.created,"
             " m.hops, m.meta, d.read FROM deliveries d JOIN messages m ON m.seq=d.msg_seq"
@@ -528,6 +597,9 @@ class Bus:
         args: List[Any] = [a, after_seq]
         if unread_only:
             q += " AND d.read IS NULL"
+        if thread:
+            q += " AND (m.thread=? OR m.reply_to=? OR m.id=?)"
+            args += [thread, thread, thread]
         q += " ORDER BY m.seq ASC LIMIT ?"
         args.append(limit)
         rows = self.con.execute(q, args).fetchall()
@@ -618,12 +690,8 @@ class Bus:
         """Block until something unread arrives for ``address`` (or timeout → [])."""
         deadline = time.time() + max(0.0, timeout)
         while True:
-            msgs = self.inbox(address, unread_only=True, mark_read=False)
-            if thread:
-                msgs = [m for m in msgs if m.thread == thread or m.reply_to == thread or m.id == thread]
+            msgs = self.inbox(address, unread_only=True, mark_read=mark_read, thread=thread)
             if msgs:
-                if mark_read:
-                    self.mark_read(address, [m.seq for m in msgs])
                 return msgs
             if time.time() >= deadline:
                 return []
@@ -633,6 +701,10 @@ class Bus:
     def claim(self, holder: str, resource: str, *, ttl_s: int = 1800, note: str = "", force: bool = False) -> Claim:
         holder = normalize_address(holder)
         resource = _norm_resource(resource)
+        with self._tx():
+            return self._claim(holder, resource, ttl_s=ttl_s, note=note, force=force)
+
+    def _claim(self, holder, resource, *, ttl_s, note, force) -> Claim:
         now = time.time()
         self.con.execute("DELETE FROM claims WHERE expires<?", (now,))
         row = self.con.execute("SELECT holder, note, created, expires FROM claims WHERE resource=?", (resource,)).fetchone()
@@ -724,7 +796,8 @@ def format_message(m: BusMessage, *, wrap: bool = True) -> str:
     if m.thread and m.thread != m.id:
         head += f"  thread={m.thread}"
     head += "  " + time.strftime("%H:%M:%S", time.localtime(m.created))
-    body = m.body.replace("</puenteo-message", "<\\/puenteo-message")
+    # Neutralise anything tag-like that could open/close our frame (any case, any spacing).
+    body = re.sub(r"(?i)<(\s*/?\s*puenteo-message)", r"&lt;\1", m.body)
     if not wrap:
         return f"[{head}]\n{body}"
     return (

@@ -113,3 +113,59 @@ def test_manifest_versions_match():
         p = repo / rel
         if p.exists():
             assert json.loads(p.read_text())["version"] == __version__, rel
+
+
+def test_install_writes_through_symlink_and_keeps_mode(home, tmp_path):
+    import os
+    import stat
+
+    from puenteo.install import plan_and_apply
+
+    real = tmp_path / "dotfiles" / "gemini.json"
+    real.parent.mkdir()
+    real.write_text("{}")
+    os.chmod(real, 0o640)
+    link = home / ".gemini" / "settings.json"
+    link.unlink()
+    try:
+        link.symlink_to(real)
+    except OSError:
+        pytest.skip("no symlinks")
+    plan_and_apply(only=["gemini"])
+    assert link.is_symlink()
+    assert "puenteo" in json.loads(real.read_text())["mcpServers"]
+    assert stat.S_IMODE(real.stat().st_mode) == 0o640
+
+
+def test_install_never_overwrites_foreign_skill(home):
+    from puenteo.install import plan_and_apply
+
+    mine = home / ".claude" / "skills" / "puenteo"
+    mine.mkdir(parents=True)
+    (mine / "SKILL.md").write_text("user's own")
+    steps = plan_and_apply(only=["claude"])
+    assert (mine / "SKILL.md").read_text() == "user's own"
+    assert any("not installed by puenteo" in s.action for s in steps)
+
+
+def test_uninstall_keeps_lookalike_user_hook(home):
+    from puenteo.install import plan_and_apply
+
+    p = home / ".claude" / "settings.json"
+    d = json.loads(p.read_text())
+    d["hooks"]["Stop"].append({"hooks": [{"type": "command", "command": "echo puenteo hook done"}]})
+    p.write_text(json.dumps(d))
+    plan_and_apply(hooks=True, only=["claude"])
+    plan_and_apply(hooks=True, only=["claude"], remove=True)
+    cmds = [h["command"] for g in json.loads(p.read_text())["hooks"]["Stop"] for h in g["hooks"]]
+    assert "echo puenteo hook done" in cmds and "say done" in cmds
+
+
+def test_jsonc_config_is_refused_not_mangled(home):
+    from puenteo.install import plan_and_apply
+
+    p = home / ".gemini" / "settings.json"
+    p.write_text('{\n  // my comment\n  "theme": "dark"\n}\n')
+    steps = plan_and_apply(only=["gemini"])
+    assert "// my comment" in p.read_text()
+    assert any(s.action.startswith("failed") for s in steps if s.kind == "mcp")
