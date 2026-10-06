@@ -2,20 +2,26 @@
 
 <!-- mcp-name: io.github.mano7onam/puenteo -->
 
-**The bridge between coding agents.**
+**Let your coding agents talk to each other.**
 
-Your machine runs many agent sessions: Claude Code in three terminals, Codex in the desktop app, Gemini in an IDE, and more. Each keeps its own history, and none of them know about the others. **puenteo** connects them:
+When you run Claude Code in one terminal, Codex in another and Gemini or Cursor in the IDE, they can't see each other. One renames a column, another breaks on it, and you end up copy-pasting context between windows. **puenteo** gives every session on your machine:
 
-- **History:** search, outline, pull and export the transcripts of *every* local agent (Claude Code, Codex, Gemini/Antigravity, Cursor, Grok, Pi, Qwen, Continue, Aider, OpenHands, Goose), ranked across all sessions at once.
-- **Live:** see which sessions are running right now, message them, ask a question and wait for the answer, post to shared channels, and claim files so parallel agents don't edit the same code.
-- **Everywhere:** one `puenteo install` adds the skills and an MCP server to every agent it finds.
+- 🔎 **Shared memory**: ranked full-text search over the history of every local agent (Claude Code, Codex, Gemini/Antigravity, Cursor, Copilot, OpenCode, Grok, Pi, Qwen, Continue, Aider, OpenHands, Goose), plus structured handoffs: goal, state, files, commits, failures.
+- 💬 **Live messaging**: see who's running (`puenteo ps`), ask another session a question and wait for its answer, broadcast to the project, share `#channels`.
+- 🔒 **Coordination**: claim files or dirs so parallel agents don't edit the same code. Optional git pre-commit guard.
+- 🔌 **Every interface**: CLI, MCP (stdio + HTTP), hooks, instant `watch`, HTTP/SSE, an A2A v1.0 facade, a web dashboard and Python, set up by one `puenteo install`.
 
-*Puenteo* comes from Spanish *puente* (bridge) and *puentear* (to bridge or jump across).
+![puenteo dashboard: four agents from different vendors coordinating a schema change](docs/img/dashboard.png)
 
-No runtime dependencies · Python ≥ 3.9 · macOS · Linux · Windows · fully local (no network, no daemon)
+*Codex asks Claude about a schema change and gets the answer two seconds later. Claude claims `src/db`, Cursor reports its frontend fix and Gemini checks a number for the release notes. All of it runs locally: one SQLite file, no daemon, no network.*
+
+*Puenteo* comes from Spanish *puente* (bridge).
+
+No runtime dependencies · Python ≥ 3.9 · macOS · Linux · Windows · optional Rust core
 
 [![PyPI](https://img.shields.io/pypi/v/puenteo.svg)](https://pypi.org/project/puenteo/)
 [![CI](https://github.com/mano7onam/puenteo/actions/workflows/ci.yml/badge.svg)](https://github.com/mano7onam/puenteo/actions/workflows/ci.yml)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.mano7onam%2Fpuenteo-blue)](https://registry.modelcontextprotocol.io/v0/servers?search=puenteo)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Install

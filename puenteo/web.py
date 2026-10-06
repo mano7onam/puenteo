@@ -51,7 +51,7 @@ async function ps(){try{const r=await api('/api/ps');document.getElementById('ps
 async function claims(){try{const r=await api('/api/claims');document.getElementById('claims').innerHTML=r.length?r.map(c=>`<div class="row"><div class="t">${esc(c.resource)}</div><div class="c">${esc(c.holder)} · ${Math.round(c.ttl_left_s/60)} min left ${esc(c.note)}</div></div>`).join(''):'<div class="empty">none</div>'}catch(e){}}
 const feed=document.getElementById('feed');
 function add(m){const d=document.createElement('div');d.className='msg';d.innerHTML=`<div class="h"><b>${esc(m.sender)}</b> → ${esc(m.to)} · ${esc((m.created_iso||'').slice(11))} · ${esc(m.id)}</div><div class="b">${esc(m.body)}</div>`;feed.appendChild(d);feed.scrollTop=feed.scrollHeight}
-api('/api/log?limit=50').then(ms=>ms.forEach(add)).finally(()=>{if(new URLSearchParams(location.search).has('nosse'))return;const es=new EventSource('/api/events?token='+encodeURIComponent(T));
+api('/api/log?limit=50').then(ms=>ms.forEach(add)).finally(()=>{if(new URLSearchParams(location.search).has('nosse')){live.className='dot on';stat.textContent='live';return}const es=new EventSource('/api/events?token='+encodeURIComponent(T));
  es.onopen=()=>{live.className='dot on';stat.textContent='live'};es.onerror=()=>{live.className='dot';stat.textContent='reconnecting…'};
  es.addEventListener('message',e=>{add(JSON.parse(e.data));claims()})});
 document.getElementById('f').onsubmit=async e=>{e.preventDefault();try{await api('/api/send',{method:'POST',body:JSON.stringify({to:to.value,text:text.value})});text.value=''}catch(err){alert(err.message)}};
