@@ -1,0 +1,6 @@
+.venv
+native/target
+dist
+build
+*.egg-info
+marketing
