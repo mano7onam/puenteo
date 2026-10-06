@@ -314,6 +314,46 @@ def _junie_sessions() -> List[LiveSession]:
     return out
 
 
+def _copilot_sessions() -> List[LiveSession]:
+    """Copilot CLI: ``session-state/<id>/inuse.<pid>.lock`` (stale locks pile up — check the pid)."""
+    root = _home() / ".copilot" / "session-state"
+    if not root.is_dir():
+        return []
+    out = []
+    for lock in root.glob("*/inuse.*.lock"):
+        try:
+            pid = int(lock.name.split(".")[1])
+        except (IndexError, ValueError):
+            continue
+        if not pid_alive(pid):
+            continue
+        d = lock.parent
+        meta = {}
+        try:
+            from .providers.copilot import _yaml
+
+            meta = _yaml(d / "workspace.yaml")
+        except Exception:
+            pass
+        try:
+            mt = (d / "events.jsonl").stat().st_mtime
+        except OSError:
+            mt = 0.0
+        out.append(
+            LiveSession(
+                agent="copilot",
+                session_id=meta.get("id") or d.name,
+                pid=pid,
+                cwd=meta.get("cwd", ""),
+                name=meta.get("name", ""),
+                updated_at=mt,
+                source=str(lock),
+                delivery=["bus"],
+            )
+        )
+    return out
+
+
 def _bus_peers() -> List[LiveSession]:
     try:
         from . import bus
@@ -328,6 +368,7 @@ DETECTORS = {
     "codex": _codex_sessions,
     "grok": _grok_sessions,
     "junie": _junie_sessions,
+    "copilot": _copilot_sessions,
 }
 
 

@@ -181,3 +181,19 @@ def test_metacache_reuses(fake_home):
     open(p, "w").write("bb")
     metacache.cached("t", p, lambda: calls.append(1) or 7)
     assert len(calls) == 2
+
+
+def test_opencode_and_copilot(more_providers):
+    from puenteo.providers import list_sessions, load_transcript, resolve_session
+
+    oc = list_sessions(providers=["opencode"], limit=0)
+    assert [s.session_id for s in oc] == ["ses_abc"]
+    tr = load_transcript(oc[0])
+    assert [(m.role, m.text) for m in tr.messages] == [("user", "refactor the tokenizer"), ("assistant", "tokenizer refactored")]
+    assert "[tool_use edit]" in load_transcript(oc[0], include_tools=True).messages[1].text
+
+    cp = list_sessions(providers=["copilot"], limit=0)
+    assert len(cp) == 1 and cp[0].title == "Fix login"
+    msgs = load_transcript(cp[0]).messages
+    assert msgs[0].text == "fix the login bug" and msgs[1].role == "assistant"
+    assert resolve_session("copilot:c0ffee").session_id.startswith("c0ffee00")

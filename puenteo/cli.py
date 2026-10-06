@@ -192,6 +192,14 @@ def build_parser() -> argparse.ArgumentParser:
     _common_flags(sp)
     _pull_flags(sp)
 
+    sp = sub.add_parser("follow", help="Live tail of another session's transcript (new messages as they land)")
+    _common_flags(sp)
+    sp.add_argument("session", help="Session ref")
+    sp.add_argument("--last", "-n", type=int, default=3, help="Show this many existing messages first")
+    sp.add_argument("--interval", type=float, default=1.0)
+    sp.add_argument("--timeout", type=float, default=None)
+    sp.add_argument("--tools", action="store_true")
+
     sp = sub.add_parser(
         "outline",
         help="Session map: counts, time span, milestones (before pull)",
@@ -366,6 +374,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                     end=end,
                 )
             )
+            return 0
+
+        if args.cmd == "follow":
+            from .follow import follow
+
+            sess = resolve_session(args.session, providers=providers, cwd=cwd)
+            if not sess:
+                print(f"Session not found: {args.session}", file=sys.stderr)
+                return 1
+            follow(sess, interval=args.interval, last=args.last, tools=args.tools, timeout=args.timeout)
             return 0
 
         if args.cmd == "outline":

@@ -114,3 +114,44 @@ def fake_home(tmp_path, monkeypatch):
 
     metacache._mem = None
     metacache._dirty.clear()
+
+
+@pytest.fixture()
+def more_providers(fake_home):
+    """OpenCode (SQLite) + Copilot CLI (session-state) stores."""
+    import sqlite3
+
+    home = fake_home["home"]
+    proj = fake_home["proj"]
+    db_dir = home / ".local" / "share" / "opencode"
+    db_dir.mkdir(parents=True)
+    con = sqlite3.connect(str(db_dir / "opencode.db"))
+    con.executescript(
+        """
+        CREATE TABLE session (id TEXT PRIMARY KEY, parent_id TEXT, directory TEXT, title TEXT,
+          time_created INTEGER, time_updated INTEGER, time_archived INTEGER, model TEXT, agent TEXT);
+        CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, data TEXT);
+        CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, data TEXT);
+        """
+    )
+    con.execute("INSERT INTO session VALUES ('ses_abc','',?, 'Refactor parser', 1790000000000, 1790000100000, NULL, 'm', 'build')", (str(proj),))
+    con.execute("INSERT INTO message VALUES ('msg_1','ses_abc',1790000000000, ?)", (json.dumps({"role": "user"}),))
+    con.execute("INSERT INTO message VALUES ('msg_2','ses_abc',1790000050000, ?)", (json.dumps({"role": "assistant"}),))
+    con.execute("INSERT INTO part VALUES ('p1','msg_1','ses_abc', ?)", (json.dumps({"type": "text", "text": "refactor the tokenizer"}),))
+    con.execute("INSERT INTO part VALUES ('p2','msg_2','ses_abc', ?)", (json.dumps({"type": "text", "text": "tokenizer refactored"}),))
+    con.execute("INSERT INTO part VALUES ('p3','msg_2','ses_abc', ?)", (json.dumps({"type": "tool", "tool": "edit", "state": {"input": {"filePath": "/x"}}}),))
+    con.commit()
+    con.close()
+
+    sd = home / ".copilot" / "session-state" / "c0ffee00-1111-2222-3333-444455556666"
+    sd.mkdir(parents=True)
+    (sd / "workspace.yaml").write_text(f"id: c0ffee00-1111-2222-3333-444455556666\ncwd: {proj}\nname: Fix login\nuser_named: true\n")
+    _jsonl(sd / "events.jsonl", [
+        {"type": "session.start", "data": {"sessionId": "c0ffee00"}},
+        {"type": "user.message", "data": {"content": "fix the login bug\n\n<system_notification>rename</system_notification>"}},
+        {"type": "assistant.message", "data": {"content": "login fixed in auth.py"}},
+    ])
+    empty = home / ".copilot" / "session-state" / "deadbeef-0000-0000-0000-000000000000"
+    empty.mkdir()
+    (empty / "events.jsonl").write_text("")
+    return fake_home

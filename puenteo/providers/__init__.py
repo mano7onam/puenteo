@@ -9,10 +9,12 @@ from . import (
     claude,
     codex,
     continue_dev,
+    copilot,
     cursor,
     gemini_cli,
     goose,
     grok,
+    opencode,
     openhands,
     pi,
     qwen,
@@ -37,6 +39,8 @@ PROVIDERS = {
     "goose": goose,
     "gemini": gemini_cli,
     "gemini_cli": gemini_cli,
+    "opencode": opencode,
+    "copilot": copilot,
 }
 
 # Display / default scan order (primary names only)
@@ -53,6 +57,8 @@ PROVIDER_NAMES = (
     "aider",
     "openhands",
     "goose",
+    "opencode",
+    "copilot",
 )
 
 # Human-friendly aliases for --provider
@@ -80,6 +86,11 @@ PROVIDER_ALIASES = {
     "openhands": "openhands",
     "opendevin": "openhands",
     "goose": "goose",
+    "opencode": "opencode",
+    "sst": "opencode",
+    "copilot": "copilot",
+    "copilot-cli": "copilot",
+    "github-copilot": "copilot",
 }
 
 
@@ -262,6 +273,10 @@ def resolve_session(
         path = os.path.abspath(os.path.expanduser(ref))
         path_l = path.replace("\\", "/")
         # infer provider from path
+        if "#ses_" in path_l or "opencode.db" in path_l:
+            return opencode.session_from_path(path)
+        if "/.copilot/session-state/" in path_l:
+            return copilot.session_from_path(path)
         if "/.claude/" in path_l or (path_l.endswith(".jsonl") and "projects" in path_l and "claude" in path_l):
             return claude.session_from_path(path)
         if "/.codex/" in path_l:
@@ -360,6 +375,8 @@ PROVIDER_HOMES = {
     "aider": "project/.aider.chat.history.md (scan with --cwd or PUENTEO_AIDER_ROOTS)",
     "openhands": "~/.openhands/openhands.db",
     "goose": "~/.config/goose  (or %APPDATA%/goose on Windows)",
+    "opencode": "~/.local/share/opencode/opencode.db",
+    "copilot": "~/.copilot/session-state",
 }
 
 
