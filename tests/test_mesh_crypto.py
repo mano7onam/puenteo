@@ -15,7 +15,7 @@ V = pathlib.Path(__file__).parent / "vectors"
 
 
 def test_bip340_vectors():
-    rows = list(csv.DictReader(open(V / "bip340.csv")))
+    rows = list(csv.DictReader(open(V / "bip340.csv", encoding="utf-8")))
     assert len(rows) >= 15
     for r in rows:
         pub = bytes.fromhex(r["public key"])
@@ -29,7 +29,7 @@ def test_bip340_vectors():
         assert c.schnorr_verify(msg, pub, sig) == ok, (r["index"], r["comment"])
 
 
-NIP44 = json.load(open(V / "nip44.json"))["v2"]
+NIP44 = json.load(open(V / "nip44.json", encoding="utf-8"))["v2"]
 
 
 def test_nip44_conversation_keys():
