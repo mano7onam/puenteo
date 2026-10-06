@@ -5,7 +5,7 @@ name: native
 on:
   push:
     branches: [main]
-    paths: ["native/**", ".github/workflows/native.yml"]
+    paths: ["native/**", "puenteo/providers/**", "puenteo/util.py", ".github/workflows/native.yml"]
   pull_request:
     paths: ["native/**"]
   release:
@@ -21,7 +21,7 @@ jobs:
           - { os: ubuntu-latest, target: x86_64 }
           - { os: ubuntu-latest, target: aarch64 }
           - { os: macos-latest, target: aarch64 }
-          - { os: macos-13, target: x86_64 }
+          - { os: macos-15-intel, target: x86_64 }
           - { os: windows-latest, target: x64 }
     runs-on: ${{ matrix.os }}
     steps:
@@ -36,11 +36,12 @@ jobs:
           args: --release --out dist
           manylinux: auto
       - name: Equivalence tests with the native core
-        if: matrix.target == 'x86_64' || matrix.target == 'x64' || (matrix.os == 'macos-latest')
+        if: matrix.target != 'aarch64' || matrix.os == 'macos-latest'
         shell: bash
         run: |
           python -m pip install -e ".[dev]"
           python -m pip install --no-index --find-links native/dist puenteo-core
+          python -c "import puenteo_core, sys; print('puenteo-core', puenteo_core.__version__, sys.platform)"
           python -c "import puenteo._native as n; assert n.core, 'native core not importable'"
           python -m pytest -q tests
       - uses: actions/upload-artifact@v4
