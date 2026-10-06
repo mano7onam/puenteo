@@ -78,7 +78,7 @@ class Identity:
 
         p = path or (state_dir() / "mesh.key")
         try:
-            return cls(bytes.fromhex(p.read_text().strip()))
+            return cls(bytes.fromhex(p.read_text(encoding="utf-8").strip()))
         except (OSError, ValueError):
             sk = crypto.generate_secret()
             fd = os.open(str(p), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

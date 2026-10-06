@@ -53,7 +53,7 @@ def live_sessions():
 
     p = _root() / "running.pid"
     if p.exists():
-        pid = int(p.read_text().split()[0])
+        pid = int(p.read_text(encoding="utf-8").split()[0])
         if pid_alive(pid):
             return [LiveSession(agent="notes", session_id=f"pid{pid}", pid=pid, source=str(p), delivery=["bus", "file"])]
     return []

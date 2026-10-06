@@ -34,7 +34,7 @@ def plug(fake_home, monkeypatch, tmp_path):
     monkeypatch.setenv("NOTES_AGENT_HOME", str(home))
     (home / "n1.jsonl").write_text(
         json.dumps({"meta": {"title": "notes chat", "cwd": str(fake_home["proj"])}}) + "\n"
-        + json.dumps({"role": "user", "text": "plugin provider works"}) + "\n")
+        + json.dumps({"role": "user", "text": "plugin provider works"}) + "\n", encoding="utf-8")
     eps = {
         "puenteo.providers": [_EP("notes", provider, "p"), _EP("claude", provider, "p"), _EP("broken", RuntimeError("boom"), "p")],
         "puenteo.tools": [_EP("example", tools.register, "t"), _EP("bad", lambda s: 1 / 0, "t")],
@@ -87,7 +87,7 @@ def test_delivery_plugin(plug, monkeypatch):
         m = b.send("user:x", "notes:pid1", "hello notes agent")
         r = push_pending(b, m)
     assert r["notes:pid1"].startswith("appended to notes inbox")
-    assert "hello notes agent" in (plug / "inbox.jsonl").read_text()
+    assert "hello notes agent" in (plug / "inbox.jsonl").read_text(encoding="utf-8")
 
 
 def test_live_plugin(plug):
@@ -95,7 +95,7 @@ def test_live_plugin(plug):
 
     from puenteo import live
 
-    (plug / "running.pid").write_text(str(os.getpid()))
+    (plug / "running.pid").write_text(str(os.getpid()), encoding="utf-8")
     live._live_cache.clear()
     found = [s for s in live.live_sessions(fresh=True) if s.agent == "notes"]
     assert found and found[0].pid == os.getpid()

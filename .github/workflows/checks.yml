@@ -44,8 +44,12 @@ jobs:
           python - <<'PY'
           import ast, pathlib, sys
           bad = []
-          for p in [*pathlib.Path("puenteo").rglob("*.py"), *pathlib.Path("tests").rglob("*.py")]:
+          for p in [*pathlib.Path("puenteo").rglob("*.py"), *pathlib.Path("tests").rglob("*.py"), *pathlib.Path("examples").rglob("*.py")]:
               for n in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
+                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in ("read_text", "write_text"):
+                      if not any(k.arg == "encoding" for k in n.keywords) and not (n.func.attr == "read_text" and n.args) \
+                              and not (n.func.attr == "write_text" and len(n.args) > 1):
+                          bad.append(f"{p}:{n.lineno} .{n.func.attr}()")
                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "open":
                       mode = n.args[1].value if len(n.args) > 1 and isinstance(n.args[1], ast.Constant) else \
                              next((k.value.value for k in n.keywords if k.arg == "mode" and isinstance(k.value, ast.Constant)), "r")
