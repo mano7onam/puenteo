@@ -245,3 +245,53 @@ def test_mcp_survives_bad_lines_and_redacts_json(bus, monkeypatch):
     assert any(r.get("error", {}).get("code") == -32600 for r in replies)
     res = [r for r in replies if r.get("id") == 1][0]["result"]["content"][0]["text"]
     assert "hunter2secretvalue" not in res and "REDACTED" in res
+
+
+def test_git_guard_blocks_peer_claimed_files(bus, tmp_path, monkeypatch):
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (repo / "db.py").write_text("x")
+    subprocess.run(["git", "-C", str(repo), "add", "db.py"], check=True)
+    monkeypatch.chdir(repo)
+    from puenteo import guard
+
+    bus.claim("claude:bbbb2222", str(repo / "db.py"), note="migration")
+    assert guard.check(me="codex:aaaa1111") == 1
+    assert guard.check(me="claude:bbbb2222") == 0
+    monkeypatch.setenv("PUENTEO_GUARD", "off")
+    assert guard.check(me="codex:aaaa1111") == 0
+    assert "installed" in guard.install(str(repo))
+    assert "already" in guard.install(str(repo))
+    assert "removed" in guard.uninstall(str(repo))
+
+
+def test_listen_generator(bus, monkeypatch):
+    import threading
+
+    import puenteo
+
+    def later():
+        import time
+
+        time.sleep(0.3)
+        from puenteo.bus import Bus
+
+        with Bus() as b:
+            b.send("claude:bbbb2222", "codex:aaaa1111", "ping-listen")
+
+    threading.Thread(target=later).start()
+    got = next(puenteo.listen(address="codex:aaaa1111", timeout=5))
+    assert got.body == "ping-listen"
+
+
+def test_watch_exec(bus, tmp_path):
+    from puenteo.cli import main
+
+    out = tmp_path / "got.txt"
+    bus.send("claude:bbbb2222", "codex:aaaa1111", "exec me")
+    rc = main(["watch", "--as", "codex:aaaa1111", "--once", "--timeout", "2",
+               "--exec", f'echo "$PUENTEO_FROM:$PUENTEO_BODY" > {out}'])
+    assert rc == 0 and out.read_text().strip() == "claude:bbbb2222:exec me"

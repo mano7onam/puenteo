@@ -67,6 +67,13 @@ def add_parsers(sub, common) -> None:
     sp.add_argument("--timeout", type=float, default=None)
     sp.add_argument("--once", action="store_true", help="Exit after the first batch")
     sp.add_argument("--jsonl", action="store_true")
+    sp.add_argument(
+        "--exec",
+        dest="exec_cmd",
+        default=None,
+        metavar="CMD",
+        help="Run CMD per message (message JSON on stdin; PUENTEO_FROM/_ID/_TO/_BODY in env)",
+    )
     _as_flag(sp)
 
     sp = sub.add_parser("thread", help="Show a whole conversation thread")
@@ -331,7 +338,20 @@ def _run(cmd: str, args, *, json_mode: bool, cwd, providers) -> int:
         me = me_address(args, via="watch")
         if not json_mode and not args.jsonl:
             print(f"[puenteo] watching inbox of {me}", flush=True)
-        n = watch(me, bus=bus, poll=args.interval, timeout=args.timeout, once=args.once, jsonl=args.jsonl or json_mode)
+        hook = None
+        if args.exec_cmd:
+            import subprocess
+
+            def hook(m):
+                env = dict(os.environ, PUENTEO_FROM=m.sender, PUENTEO_ID=m.id, PUENTEO_TO=m.to,
+                           PUENTEO_THREAD=m.thread, PUENTEO_BODY=m.body[:30000])
+                try:
+                    subprocess.run(args.exec_cmd, shell=True, input=json.dumps(m.to_dict(), ensure_ascii=False),
+                                   text=True, env=env, timeout=300)
+                except Exception as e:
+                    print(f"puenteo watch --exec: {e}", file=sys.stderr)
+        n = watch(me, bus=bus, poll=args.interval, timeout=args.timeout, once=args.once,
+                  jsonl=args.jsonl or json_mode, on_message=hook)
         return 0 if n or not args.once else 3
 
     if cmd == "thread":

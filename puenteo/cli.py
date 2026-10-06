@@ -286,6 +286,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--open", action="store_true", help="Open the dashboard in a browser")
     sp.add_argument("--print-token", action="store_true", help="Print the bearer token and exit")
 
+    sp = sub.add_parser("guard", help="Git pre-commit guard against committing files a peer has claimed")
+    sp.add_argument("action", choices=["install", "uninstall", "check"])
+    sp.add_argument("--repo", default=".")
+
     sp = sub.add_parser("mcp", help="Run the puenteo MCP server on stdio (agents start this)")
     sp.add_argument("mcp_args", nargs=argparse.REMAINDER)
 
@@ -362,6 +366,14 @@ def _main(args, parser, providers) -> int:
             from .mcp import main as mcp_main
 
             return mcp_main(args.mcp_args)
+
+        if args.cmd == "guard":
+            from . import guard
+
+            if args.action == "check":
+                return guard.check()
+            print((guard.install if args.action == "install" else guard.uninstall)(args.repo))
+            return 0
 
         if args.cmd == "serve":
             from . import server

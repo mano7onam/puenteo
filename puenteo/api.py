@@ -379,6 +379,30 @@ def reply(msg_id: str, text: str, *, sender: Optional[str] = None):
         return msg
 
 
+def listen(*, address: Optional[str] = None, timeout: Optional[float] = None, mark_read: bool = True):
+    """
+    Generator of incoming messages, delivered as they arrive (doorbell-driven)::
+
+        for msg in puenteo.listen():
+            print(msg.sender, msg.body)
+            puenteo.reply(msg.id, "on it")
+    """
+    import time as _t
+
+    from .bus import Bus
+    from .notify import Bell
+
+    me = _me(address)
+    deadline = _t.time() + timeout if timeout else None
+    with Bus() as b, Bell(me) as bell:
+        while True:
+            for m in b.inbox(me, unread_only=True, mark_read=mark_read):
+                yield m
+            if deadline and _t.time() >= deadline:
+                return
+            bell.wait(5.0 if not deadline else max(0.0, min(5.0, deadline - _t.time())))
+
+
 def handoff(ref: Union[str, Session], *, query: Optional[str] = None, max_chars: int = 12000) -> str:
     """Structured markdown handoff of a session (goal, state, plan, files, commits, problems, tail)."""
     from .extract import handoff_brief
@@ -427,4 +451,5 @@ __all__ = [
     "inbox",
     "reply",
     "handoff",
+    "listen",
 ]
