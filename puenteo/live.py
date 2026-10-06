@@ -136,7 +136,7 @@ def _ppid(pid: int) -> int:
         return os.getppid()
     if sys.platform.startswith("linux"):
         try:
-            with open(f"/proc/{pid}/stat") as fh:
+            with open(f"/proc/{pid}/stat", encoding="utf-8") as fh:
                 return int(fh.read().rsplit(")", 1)[1].split()[1])
         except Exception:
             return 0

@@ -3,4 +3,4 @@
 useDefault = true
 
 [allowlist]
-paths = ['''tests/test_core\.py''', '''tests/test_bus\.py''']
+paths = ['''tests/test_core\.py''', '''tests/test_bus\.py''', '''tests/vectors/.*''']  # public BIP-340 / NIP-44 test vectors

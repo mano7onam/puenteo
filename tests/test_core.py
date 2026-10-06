@@ -174,11 +174,11 @@ def test_metacache_reuses(fake_home):
 
     calls = []
     p = str(fake_home["proj"] / "f.txt")
-    open(p, "w").write("a")
+    open(p, "w", encoding="utf-8").write("a")
     for _ in range(3):
         metacache.cached("t", p, lambda: calls.append(1) or 7)
     assert len(calls) == 1
-    open(p, "w").write("bb")
+    open(p, "w", encoding="utf-8").write("bb")
     metacache.cached("t", p, lambda: calls.append(1) or 7)
     assert len(calls) == 2
 

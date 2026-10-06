@@ -375,8 +375,9 @@ def _run(cmd: str, args, *, json_mode: bool, cwd, providers) -> int:
 
             last = msgs[-1].seq if msgs else 0
             bell = Bell(ALL, bus.path)
+            idle = 5.0 if bell.sock is not None else 0.5
             while True:
-                bell.wait(5.0)
+                bell.wait(idle)
                 new = bus.history(limit=200, after_seq=last, **kw)
                 if new:
                     _print_log(new, json_mode)

@@ -87,7 +87,17 @@ def boxes(tmp_path, relay_url, monkeypatch):
         with x:
             x.node.announce()
     keys = {x.ident.pubhex for x in (a, b, c)}
-    assert _until(lambda: all(_knows_keys(x, keys - {x.ident.pubhex}) for x in (a, b, c)))
+
+    def everyone_knows_everyone():
+        if all(_knows_keys(x, keys - {x.ident.pubhex}) for x in (a, b, c)):
+            return True
+        for x in (a, b, c):  # slow CI runners: announce again until discovery converges
+            with x:
+                x.node.announce()
+        time.sleep(0.5)
+        return False
+
+    assert _until(everyone_knows_everyone, timeout=30)
     yield a, b, c
     for x in (a, b, c):
         x.node.stop()

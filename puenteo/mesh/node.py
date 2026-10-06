@@ -260,13 +260,14 @@ class Node:
         from ..notify import Bell
 
         with Bell(MESH_OUTBOX, self.bus_path) as bell:
+            idle = 5.0 if bell.sock is not None else 0.5  # no doorbell (Windows): poll fast
             while not self._stop.is_set():
                 try:
                     for m in self.bus.inbox(MESH_OUTBOX, unread_only=True, mark_read=True, limit=100):
                         self.ship(m)
                 except Exception as e:
                     self.log(f"outbox error: {e}")
-                bell.wait(5.0)
+                bell.wait(idle)
 
     def ship(self, m: BusMessage) -> None:
         local_to, node = split_remote(m.to)

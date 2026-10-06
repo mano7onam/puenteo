@@ -13,11 +13,11 @@ def home(tmp_path, monkeypatch):
     (h / ".claude").mkdir(parents=True)
     (h / ".codex" / "skills").mkdir(parents=True)
     (h / ".gemini").mkdir()
-    (h / ".gemini" / "settings.json").write_text(json.dumps({"theme": "dark", "mcpServers": {"other": {"command": "x"}}}))
+    (h / ".gemini" / "settings.json").write_text(json.dumps({"theme": "dark", "mcpServers": {"other": {"command": "x"}}}), encoding="utf-8")
     (h / ".claude" / "settings.json").write_text(json.dumps({
         "model": "opus",
         "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "say done"}]}]},
-    }))
+    }), encoding="utf-8")
     try:
         (h / ".codex" / "skills" / "puenteo").symlink_to(tmp_path / "gone" / "skills" / "puenteo")
     except OSError:  # Windows without symlink privilege
@@ -36,11 +36,11 @@ def test_install_idempotent_and_reversible(home):
     assert (home / ".agents" / "skills" / "puenteo-bus" / "SKILL.md").exists()
     assert not (home / ".codex" / "skills" / "puenteo").is_symlink(), "legacy dangling link removed"
 
-    g = json.loads((home / ".gemini" / "settings.json").read_text())
+    g = json.loads((home / ".gemini" / "settings.json").read_text(encoding="utf-8"))
     assert g["theme"] == "dark" and "other" in g["mcpServers"] and g["mcpServers"]["puenteo"]["args"][-1] == "mcp"
     assert (home / ".gemini" / "settings.json.puenteo-bak").exists()
 
-    c = json.loads((home / ".claude" / "settings.json").read_text())
+    c = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
     assert c["model"] == "opus"
     stop_cmds = [h["command"] for g in c["hooks"]["Stop"] for h in g["hooks"]]
     assert "say done" in stop_cmds and any("hook Stop" in x for x in stop_cmds)
@@ -52,9 +52,9 @@ def test_install_idempotent_and_reversible(home):
 
     plan_and_apply(hooks=True, remove=True)
     assert not (home / ".claude" / "skills" / "puenteo").exists()
-    g = json.loads((home / ".gemini" / "settings.json").read_text())
+    g = json.loads((home / ".gemini" / "settings.json").read_text(encoding="utf-8"))
     assert "puenteo" not in g["mcpServers"] and "other" in g["mcpServers"]
-    c = json.loads((home / ".claude" / "settings.json").read_text())
+    c = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
     assert [h["command"] for g in c["hooks"]["Stop"] for h in g["hooks"]] == ["say done"]
     assert set(c["hooks"]) == {"Stop"}
 
@@ -62,10 +62,10 @@ def test_install_idempotent_and_reversible(home):
 def test_dry_run_touches_nothing(home):
     from puenteo.install import plan_and_apply
 
-    before = (home / ".gemini" / "settings.json").read_text()
+    before = (home / ".gemini" / "settings.json").read_text(encoding="utf-8")
     steps = plan_and_apply(hooks=True, dry=True)
     assert steps
-    assert (home / ".gemini" / "settings.json").read_text() == before
+    assert (home / ".gemini" / "settings.json").read_text(encoding="utf-8") == before
     assert not (home / ".claude" / "skills").exists()
 
 
@@ -74,16 +74,16 @@ def test_uninstall_leaves_foreign_skill(home):
 
     mine = home / ".claude" / "skills" / "puenteo"
     mine.mkdir(parents=True)
-    (mine / "SKILL.md").write_text("user's own skill")
+    (mine / "SKILL.md").write_text("user's own skill", encoding="utf-8")
     plan_and_apply(remove=True, only=["claude"])
-    assert (mine / "SKILL.md").read_text() == "user's own skill"
+    assert (mine / "SKILL.md").read_text(encoding="utf-8") == "user's own skill"
 
 
 def test_skills_are_packaged():
     from puenteo.install import SKILLS, skills_source
 
     for name in SKILLS:
-        text = (skills_source() / name / "SKILL.md").read_text()
+        text = (skills_source() / name / "SKILL.md").read_text(encoding="utf-8")
         assert text.startswith("---\nname: " + name)
 
 
@@ -98,7 +98,7 @@ def test_plugin_skills_in_sync():
         if not root.exists():
             pytest.skip("not a source checkout")
         for name in SKILLS:
-            assert (root / name / "SKILL.md").read_text() == (skills_source() / name / "SKILL.md").read_text(), (
+            assert (root / name / "SKILL.md").read_text(encoding="utf-8") == (skills_source() / name / "SKILL.md").read_text(encoding="utf-8"), (
                 f"run: cp -R puenteo/data/skills/. {root.relative_to(repo)}/")
 
 
@@ -112,7 +112,7 @@ def test_manifest_versions_match():
     for rel in ("plugin/.claude-plugin/plugin.json", "gemini-extension.json"):
         p = repo / rel
         if p.exists():
-            assert json.loads(p.read_text())["version"] == __version__, rel
+            assert json.loads(p.read_text(encoding="utf-8"))["version"] == __version__, rel
 
 
 @pytest.mark.skipif(__import__("sys").platform == "win32", reason="POSIX symlinks and file modes")
@@ -124,7 +124,7 @@ def test_install_writes_through_symlink_and_keeps_mode(home, tmp_path):
 
     real = tmp_path / "dotfiles" / "gemini.json"
     real.parent.mkdir()
-    real.write_text("{}")
+    real.write_text("{}", encoding="utf-8")
     os.chmod(real, 0o640)
     link = home / ".gemini" / "settings.json"
     link.unlink()
@@ -134,7 +134,7 @@ def test_install_writes_through_symlink_and_keeps_mode(home, tmp_path):
         pytest.skip("no symlinks")
     plan_and_apply(only=["gemini"])
     assert link.is_symlink()
-    assert "puenteo" in json.loads(real.read_text())["mcpServers"]
+    assert "puenteo" in json.loads(real.read_text(encoding="utf-8"))["mcpServers"]
     assert stat.S_IMODE(real.stat().st_mode) == 0o640
 
 
@@ -143,9 +143,9 @@ def test_install_never_overwrites_foreign_skill(home):
 
     mine = home / ".claude" / "skills" / "puenteo"
     mine.mkdir(parents=True)
-    (mine / "SKILL.md").write_text("user's own")
+    (mine / "SKILL.md").write_text("user's own", encoding="utf-8")
     steps = plan_and_apply(only=["claude"])
-    assert (mine / "SKILL.md").read_text() == "user's own"
+    assert (mine / "SKILL.md").read_text(encoding="utf-8") == "user's own"
     assert any("not installed by puenteo" in s.action for s in steps)
 
 
@@ -153,12 +153,12 @@ def test_uninstall_keeps_lookalike_user_hook(home):
     from puenteo.install import plan_and_apply
 
     p = home / ".claude" / "settings.json"
-    d = json.loads(p.read_text())
+    d = json.loads(p.read_text(encoding="utf-8"))
     d["hooks"]["Stop"].append({"hooks": [{"type": "command", "command": "echo puenteo hook done"}]})
-    p.write_text(json.dumps(d))
+    p.write_text(json.dumps(d), encoding="utf-8")
     plan_and_apply(hooks=True, only=["claude"])
     plan_and_apply(hooks=True, only=["claude"], remove=True)
-    cmds = [h["command"] for g in json.loads(p.read_text())["hooks"]["Stop"] for h in g["hooks"]]
+    cmds = [h["command"] for g in json.loads(p.read_text(encoding="utf-8"))["hooks"]["Stop"] for h in g["hooks"]]
     assert "echo puenteo hook done" in cmds and "say done" in cmds
 
 
@@ -166,9 +166,9 @@ def test_jsonc_config_is_refused_not_mangled(home):
     from puenteo.install import plan_and_apply
 
     p = home / ".gemini" / "settings.json"
-    p.write_text('{\n  // my comment\n  "theme": "dark"\n}\n')
+    p.write_text('{\n  // my comment\n  "theme": "dark"\n}\n', encoding="utf-8")
     steps = plan_and_apply(only=["gemini"])
-    assert "// my comment" in p.read_text()
+    assert "// my comment" in p.read_text(encoding="utf-8")
     assert any(s.action.startswith("failed") for s in steps if s.kind == "mcp")
 
 
@@ -179,7 +179,7 @@ def test_mcp_registry_manifest():
     p = pathlib.Path(__file__).resolve().parents[1] / "server.json"
     if not p.exists():
         pytest.skip("not a source checkout")
-    d = json.loads(p.read_text())
+    d = json.loads(p.read_text(encoding="utf-8"))
     assert len(d["description"]) <= 100, "MCP Registry limit"
-    readme = (p.parent / "README.md").read_text()
+    readme = (p.parent / "README.md").read_text(encoding="utf-8")
     assert f"mcp-name: {d['name']}" in readme, "PyPI ownership marker"

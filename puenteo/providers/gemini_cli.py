@@ -162,7 +162,7 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
 
     try:
         if path.suffix == ".jsonl":
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 for line in fh:
                     line = line.strip()
                     if not line:

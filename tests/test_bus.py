@@ -253,7 +253,7 @@ def test_git_guard_blocks_peer_claimed_files(bus, tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    (repo / "db.py").write_text("x")
+    (repo / "db.py").write_text("x", encoding="utf-8")
     subprocess.run(["git", "-C", str(repo), "add", "db.py"], check=True)
     monkeypatch.chdir(repo)
     from puenteo import guard
@@ -295,7 +295,7 @@ def test_watch_exec(bus, tmp_path):
     bus.send("claude:bbbb2222", "codex:aaaa1111", "exec me")
     rc = main(["watch", "--as", "codex:aaaa1111", "--once", "--timeout", "2",
                "--exec", f'echo "$PUENTEO_FROM:$PUENTEO_BODY" > {out}'])
-    assert rc == 0 and out.read_text().strip() == "claude:bbbb2222:exec me"
+    assert rc == 0 and out.read_text(encoding="utf-8").strip() == "claude:bbbb2222:exec me"
 
 
 def test_mcp_provisional_identity_is_adopted(bus, monkeypatch):

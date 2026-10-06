@@ -106,7 +106,7 @@ def fake_home(tmp_path, monkeypatch):
             {"message": {"role": "user", "content": "continue user text"}},
             {"message": {"role": "assistant", "content": "continue assistant text"}},
         ],
-    }))
+    }), encoding="utf-8")
 
     yield {"home": home, "proj": proj}
 
@@ -145,7 +145,7 @@ def more_providers(fake_home):
 
     sd = home / ".copilot" / "session-state" / "c0ffee00-1111-2222-3333-444455556666"
     sd.mkdir(parents=True)
-    (sd / "workspace.yaml").write_text(f"id: c0ffee00-1111-2222-3333-444455556666\ncwd: {proj}\nname: Fix login\nuser_named: true\n")
+    (sd / "workspace.yaml").write_text(f"id: c0ffee00-1111-2222-3333-444455556666\ncwd: {proj}\nname: Fix login\nuser_named: true\n", encoding="utf-8")
     _jsonl(sd / "events.jsonl", [
         {"type": "session.start", "data": {"sessionId": "c0ffee00"}},
         {"type": "user.message", "data": {"content": "fix the login bug\n\n<system_notification>rename</system_notification>"}},
@@ -153,5 +153,5 @@ def more_providers(fake_home):
     ])
     empty = home / ".copilot" / "session-state" / "deadbeef-0000-0000-0000-000000000000"
     empty.mkdir()
-    (empty / "events.jsonl").write_text("")
+    (empty / "events.jsonl").write_text("", encoding="utf-8")
     return fake_home
