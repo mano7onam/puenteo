@@ -177,14 +177,17 @@ def _ago(ts: float) -> str:
 
 
 def _print_msgs(msgs: List[BusMessage], json_mode: bool) -> None:
+    from .redact import enabled_by_default, redact
+
+    r = redact if enabled_by_default() else (lambda t: t)
     if json_mode:
-        print(json.dumps([m.to_dict() for m in msgs], ensure_ascii=False, indent=2))
+        print(r(json.dumps([m.to_dict() for m in msgs], ensure_ascii=False, indent=2)))
         return
     if not msgs:
         print("No messages.")
         return
     for m in msgs:
-        print(format_message(m, wrap=False))
+        print(r(format_message(m, wrap=False)))
         print()
 
 

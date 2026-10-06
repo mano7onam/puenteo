@@ -71,6 +71,12 @@ def push_pending(bus: Bus, msg: BusMessage) -> Dict[str, str]:
 # ----------------------------------------------------------------------------- watch
 
 
+def _maybe_redact(text: str) -> str:
+    from .redact import enabled_by_default, redact
+
+    return redact(text) if enabled_by_default() else text
+
+
 def watch(
     address: str,
     *,
@@ -102,9 +108,9 @@ def watch(
             msgs = []
         for m in msgs:
             if jsonl:
-                out.write(json.dumps(m.to_dict(), ensure_ascii=False) + "\n")
+                out.write(_maybe_redact(json.dumps(m.to_dict(), ensure_ascii=False)) + "\n")
             else:
-                body = " ".join(m.body.split())
+                body = _maybe_redact(" ".join(m.body.split()))
                 if len(body) > 600:
                     body = body[:599] + "…"
                 out.write(f"[puenteo] {m.sender} → {m.to} (id {m.id}): {body}\n")
@@ -143,11 +149,14 @@ def _agent_from_hook(data: Dict[str, Any], agent: Optional[str]) -> str:
 
 
 def _render_inbox(msgs: List[BusMessage], me: str) -> str:
+    from .redact import enabled_by_default, redact
+
     lines = [f"You have {len(msgs)} new message(s) from other agent sessions (you are {me}).", PEER_RULES, ""]
     for m in msgs:
         lines.append(format_message(m))
         lines.append("")
-    return "\n".join(lines).rstrip()
+    text = "\n".join(lines).rstrip()
+    return redact(text) if enabled_by_default() else text
 
 
 def run_hook(event: str, *, agent: Optional[str] = None, quiet_start: bool = False) -> int:
