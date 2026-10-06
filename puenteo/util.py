@@ -88,6 +88,12 @@ def cwd_matches(filter_cwd: Optional[str], session_cwd: Optional[str]) -> bool:
     raw = str(filter_cwd).strip()
     if raw in (".", "..") or raw.startswith(("./", "../", ".\\", "..\\")):
         raw = os.path.abspath(raw)
+    # A session cwd is only meaningful as an absolute path; never resolve it
+    # against *our* cwd (that made "-Users-x-proj" look like a child of $PWD).
+    if not looks_absolute_path(str(session_cwd).strip()):
+        if looks_absolute_path(raw):
+            return False
+        return raw.replace("\\", "/").lower().rstrip("/") in str(session_cwd).lower()
     sess = path_slash(normalize_path(session_cwd))
     if not sess:
         return False

@@ -37,6 +37,9 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
     pattern = os.path.join(root, "**", "*.jsonl")
     for path in glob.glob(pattern, recursive=True):
         if "/subagents/" in path.replace("\\", "/"):
+            sub = _subagent_session(path, cwd)
+            if sub:
+                out.append(sub)
             continue
         # project dir name → approximate cwd
         rel = os.path.relpath(path, root)
@@ -83,10 +86,54 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
     return out
 
 
+def _subagent_session(path: str, cwd: Optional[str]) -> Optional[Session]:
+    """``<project>/<parent-sid>/subagents/agent-<id>.jsonl`` → child session ``agent-<id>``."""
+    from ..metacache import cached
+
+    parts = path.replace("\\", "/").split("/")
+    try:
+        i = parts.index("subagents")
+    except ValueError:
+        return None
+    parent = parts[i - 1]
+    aid = os.path.splitext(parts[-1])[0]
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    title, real_cwd, _sid = _peek_cached(path)
+    if cwd and not cwd_matches(cwd, real_cwd):
+        return None
+    meta_path = path[: -len(".jsonl")] + ".meta.json"
+    info = cached("claude.submeta", meta_path, lambda: _read_json(meta_path), stat_path=path) or {}
+    desc = str(info.get("description") or "")
+    label = f"[subagent {info.get('agentType') or 'agent'}] {desc or title}".strip()
+    return Session(
+        provider="claude_code",
+        session_id=aid,
+        path=path,
+        title=label,
+        cwd=real_cwd,
+        mtime=st.st_mtime,
+        size=st.st_size,
+        meta={"parent_id": parent, "subagent": True, "agent_type": info.get("agentType"), "tool_use_id": info.get("toolUseId")},
+    )
+
+
+def _read_json(path: str) -> dict:
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
 def session_from_path(path: str) -> Optional[Session]:
     path = expand(path)
     if not os.path.isfile(path):
         return None
+    if "/subagents/" in path.replace("\\", "/"):
+        return _subagent_session(path, None)
     title, cwd, sid = _peek_cached(path)
     sid = sid or os.path.splitext(os.path.basename(path))[0]
     st = os.stat(path)
@@ -244,8 +291,9 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
                     title = cand
                     break
 
-    session.title = title or session.title
+    if not session.meta.get("subagent"):
+        session.title = title or session.title
+        session.session_id = sid or session.session_id
     session.cwd = cwd or session.cwd
-    session.session_id = sid or session.session_id
     session.message_count = len(messages)
     return Transcript(session=session, messages=messages)

@@ -233,3 +233,11 @@ def test_cli_redacts_pull(fake_home, capsys, monkeypatch):
     assert "ghp_bbbb" not in out and "[REDACTED:github]" in out
     assert main(["pull", "22222222", "--mode", "last", "--no-redact"]) == 0
     assert "ghp_bbbb" in capsys.readouterr().out
+
+
+def test_cwd_filter_ignores_relative_session_cwd(tmp_path, monkeypatch):
+    from puenteo.util import cwd_matches
+
+    monkeypatch.chdir(tmp_path)
+    assert not cwd_matches(str(tmp_path), "-Users-x-dev-other")
+    assert cwd_matches("other", "-Users-x-dev-other")

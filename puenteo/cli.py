@@ -198,6 +198,10 @@ def build_parser() -> argparse.ArgumentParser:
     _common_flags(sp)
     _pull_flags(sp)
 
+    sp = sub.add_parser("tree", help="Session lineage: parent, subagents, forks")
+    _common_flags(sp)
+    sp.add_argument("session", help="Session ref (any member of the family)")
+
     sp = sub.add_parser("follow", help="Live tail of another session's transcript (new messages as they land)")
     _common_flags(sp)
     sp.add_argument("session", help="Session ref")
@@ -414,6 +418,16 @@ def _main(args, parser, providers) -> int:
                     end=end,
                 )
             )
+            return 0
+
+        if args.cmd == "tree":
+            from . import tree
+
+            sess = resolve_session(args.session, providers=providers, cwd=cwd)
+            if not sess:
+                print(f"Session not found: {args.session}", file=sys.stderr)
+                return 1
+            print(tree.render(sess, list_sessions(providers=[sess.provider], limit=0)))
             return 0
 
         if args.cmd == "follow":
