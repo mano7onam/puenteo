@@ -279,7 +279,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("status", help="Show what providers/session stores were found")
     _common_flags(sp)
-    sp = sub.add_parser("doctor", help="Alias for status")
+    sp = sub.add_parser("doctor", help="Check the setup: PATH, skills, MCP registrations, bus, index")
     _common_flags(sp)
 
     return p
@@ -382,7 +382,19 @@ def _main(args, parser, providers) -> int:
         if args.cmd == "index":
             return cmd_index(args, providers=providers, cwd=cwd, json_mode=json_mode)
 
-        if args.cmd in ("status", "doctor"):
+        if args.cmd == "doctor":
+            from . import doctor
+
+            rows = doctor.checks()
+            if json_mode:
+                import json as _json
+
+                print(_json.dumps([{"check": a, "status": b, "detail": c} for a, b, c in rows], indent=2, ensure_ascii=False))
+            else:
+                print(doctor.render(rows))
+            return 1 if any(r[1] == doctor.FAIL for r in rows) else 0
+
+        if args.cmd == "status":
             return cmd_status(json_mode=json_mode)
 
         if args.cmd == "show":
