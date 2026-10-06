@@ -173,7 +173,8 @@ def run_hook(event: str, *, agent: Optional[str] = None, quiet_start: bool = Fal
         if not sid:
             return 0
         ev = data.get("hook_event_name") or event
-        me = f"{_agent_from_hook(data, agent)}:{sid}"
+        agent_name = _agent_from_hook(data, agent)
+        me = f"{agent_name}:{sid}"
         bus = Bus()
         bus.register(me, cwd=str(data.get("cwd") or ""), via="hook")
 
@@ -192,12 +193,18 @@ def run_hook(event: str, *, agent: Optional[str] = None, quiet_start: bool = Fal
         if msgs:
             ctx = _render_inbox(msgs, me)
         elif ev == "SessionStart" and not quiet_start:
-            n_live = len([p for p in bus.peers(alive_only=True) if p.address != me])
+            from .util import cwd_matches
+
+            here = str(data.get("cwd") or "")
+            peers = [p for p in bus.peers(alive_only=True) if p.address != me]
+            same = [p for p in peers if here and cwd_matches(here, p.cwd)]
             ctx = (
-                f"puenteo bus: you are {me}. {n_live} other live peer session(s). "
-                "Use `puenteo ps` to see them, `puenteo send <to> \"…\"` to message, "
-                "`puenteo inbox` to read."
+                f"puenteo bus: you are {me}. {len(peers)} other live agent session(s) on this machine"
+                + (f", {len(same)} in this project ({', '.join(p.address for p in same[:4])})" if same else "")
+                + ". `puenteo ps` lists them; `puenteo send <to> \"…\"` messages one; unread mail is shown to you automatically."
             )
+            if agent_name == "claude":
+                ctx += " To be woken by replies while idle, run `puenteo watch` with the Monitor tool."
         if ctx:
             print(json.dumps({"hookSpecificOutput": {"hookEventName": ev, "additionalContext": ctx}}, ensure_ascii=False))
         return 0
