@@ -6,11 +6,11 @@ from typing import Any, Dict, List, Optional
 
 from .models import Message, Session, Transcript
 from .search import Hit
-from .util import clip, format_mtime, format_size, short_id, strip_ansi
+from .util import clip, format_mtime, format_size, short_id, strip_ansi, unique_prefixes
 
 
-def session_row(s: Session) -> str:
-    sid = short_id(s.session_id, 8)
+def session_row(s: Session, sid: Optional[str] = None) -> str:
+    sid = sid or short_id(s.session_id, 8)
     prov = {
         "claude_code": "claude",
         "codex": "codex",
@@ -28,9 +28,10 @@ def session_row(s: Session) -> str:
     title = strip_ansi((s.title or "").replace("\n", " "))
     if len(title) > 56:
         title = title[:55] + "…"
+    pad = " " * (9 + len(sid) + 2 - 8)
     return (
         f"{prov:7}  {sid:8}  {format_mtime(s.mtime):16}  "
-        f"{format_size(s.size):6}  {title}\n         {cwd}"
+        f"{format_size(s.size):6}  {title}\n         {pad}{cwd}"
     )
 
 
@@ -49,6 +50,8 @@ def format_session_list(
         return json.dumps([s.to_dict() for s in sessions], ensure_ascii=False, indent=2)
     if not sessions:
         return "No sessions found."
+    pref = unique_prefixes([s.session_id for s in sessions], min_len=8)
+    width = max([8] + [len(v) for v in pref.values()])
 
     if group_by == "cwd":
         groups_s: Dict[str, List[Session]] = defaultdict(list)
@@ -65,7 +68,7 @@ def format_session_list(
             lines.append("")
             lines.append(f"## {cwd}  ({len(items)} session(s))")
             for s in sorted(items, key=lambda x: x.mtime, reverse=True):
-                lines.append(session_row(s))
+                lines.append(session_row(s, pref.get(s.session_id)))
         lines.append("")
         lines.append(
             f"{len(sessions)} session(s). Use: asb show <id>  |  asb pull <id> --query '…'"
@@ -73,11 +76,11 @@ def format_session_list(
         return "\n".join(lines)
 
     lines = [
-        f"{'PROV':7}  {'ID':8}  {'MTIME':16}  {'SIZE':6}  TITLE / CWD",
+        f"{'PROV':7}  {'ID':{width}}  {'MTIME':16}  {'SIZE':6}  TITLE / CWD",
         "-" * 88,
     ]
     for s in sessions:
-        lines.append(session_row(s))
+        lines.append(session_row(s, pref.get(s.session_id).ljust(width)))
     lines.append("")
     lines.append(
         f"{len(sessions)} session(s). Use: asb show <id>  |  asb pull <id> --query '…'  (or puenteo …)"
@@ -190,16 +193,17 @@ def format_hits(hits: List[Hit], *, json_mode: bool = False) -> str:
     by_sess: Dict[str, List[Hit]] = defaultdict(list)
     order: List[str] = []
     for h in hits:
-        key = h.session.session_id
+        key = h.session.provider + ":" + h.session.session_id + ":" + h.session.path
         if key not in by_sess:
             order.append(key)
         by_sess[key].append(h)
 
+    pref = unique_prefixes([h.session.session_id for h in hits], min_len=8)
     lines: List[str] = []
     for key in order:
         group = by_sess[key]
         h0 = group[0]
-        sid = short_id(h0.session.session_id, 8)
+        sid = pref.get(h0.session.session_id) or short_id(h0.session.session_id, 8)
         full = h0.session.session_id
         prov = h0.session.provider.replace("claude_code", "claude")
         title = strip_ansi(h0.session.title or "")[:70]

@@ -62,12 +62,22 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
                 st = transcript.stat()
             except OSError:
                 continue
-            title, real_cwd = _peek(transcript, sess_dir, root, sid)
+            from ..metacache import cached
+
+            title, real_cwd = cached(
+                "agy.peek",
+                str(transcript),
+                lambda: list(_peek(transcript, sess_dir, root, sid)),
+            )
             if _is_junk_cwd(real_cwd):
                 real_cwd = ""
             if cwd and not cwd_matches(cwd, real_cwd):
                 # still allow if transcript text mentions the project
-                if not _cwd_in_file(transcript, cwd or ""):
+                if not cached(
+                    "agy.mentions:" + cwd,
+                    str(transcript),
+                    lambda: _cwd_in_file(transcript, cwd or ""),
+                ):
                     continue
             seen.add(sid)
             out.append(

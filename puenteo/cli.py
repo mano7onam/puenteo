@@ -9,7 +9,7 @@ import sys
 from typing import List, Optional, Tuple
 
 from . import extract, format as fmt
-from .providers import list_sessions, load_transcript, resolve_session
+from .providers import AmbiguousSessionError, list_sessions, load_transcript, resolve_session
 from .search import search_all, search_transcript
 from .version import APP_NAME, __version__
 
@@ -166,7 +166,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exclude session id/prefix from global search (repeatable; common: your current session)",
     )
     sp.add_argument("--limit", "-n", type=int, default=15)
-    sp.add_argument("--session-limit", type=int, default=40, help="How many sessions to scan")
+    sp.add_argument(
+        "--session-limit",
+        type=int,
+        default=0,
+        help="Only search the N newest sessions (default 0 = all, via the index)",
+    )
+    sp.add_argument("--since", default=None, help="Only sessions updated since (YYYY-MM-DD or epoch)")
+    sp.add_argument(
+        "--exclude-self",
+        action="store_true",
+        help="Skip the session running this command (auto-detected)",
+    )
+    sp.add_argument("--no-index", action="store_true", help="Scan files instead of the FTS index")
 
     sp = sub.add_parser(
         "pull",
@@ -225,6 +237,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--around", type=int, default=None)
     sp.add_argument("--radius", type=int, default=5)
 
+    sp = sub.add_parser("index", help="Build/refresh the full-text search index (or --stats/--clear)")
+    _common_flags(sp)
+    sp.add_argument("--stats", action="store_true", help="Show index size and counts")
+    sp.add_argument("--clear", action="store_true", help="Drop the index and metadata cache")
+
     sp = sub.add_parser("status", help="Show what providers/session stores were found")
     _common_flags(sp)
     sp = sub.add_parser("doctor", help="Alias for status")
@@ -243,7 +260,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Only expand ~ and relative paths that look path-like.
     if cwd:
         cwd = cwd.strip()
-        if cwd.startswith("~") or cwd.startswith("/") or (len(cwd) > 1 and cwd[1] == ":"):
+        if (
+            cwd.startswith(("~", "/", "."))
+            or (len(cwd) > 1 and cwd[1] == ":")
+            or os.path.isdir(cwd)
+        ):
             cwd = os.path.abspath(os.path.expanduser(cwd))
     json_mode = bool(getattr(args, "json", False))
 
@@ -264,6 +285,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                 )
             )
             return 0
+
+        if args.cmd == "index":
+            return cmd_index(args, providers=providers, cwd=cwd, json_mode=json_mode)
 
         if args.cmd in ("status", "doctor"):
             return cmd_status(json_mode=json_mode)
@@ -313,6 +337,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                     session_limit=args.session_limit,
                     hit_limit=args.limit,
                     exclude_sessions=getattr(args, "exclude_session", None),
+                    exclude_self=bool(getattr(args, "exclude_self", False)),
+                    since=getattr(args, "since", None),
+                    use_index=False if getattr(args, "no_index", False) else None,
                 )
             print(fmt.format_hits(hits, json_mode=json_mode))
             return 0
@@ -371,6 +398,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
     except KeyboardInterrupt:
         return 130
+    except AmbiguousSessionError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 4
     except Exception as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
@@ -490,6 +520,36 @@ def cmd_export(args, *, providers, cwd) -> int:
     if not written:
         print("Nothing written", file=sys.stderr)
         return 1
+    return 0
+
+
+def cmd_index(args, *, providers, cwd, json_mode: bool) -> int:
+    import json
+    import time
+
+    from . import index as fts
+    from . import metacache
+
+    if args.clear:
+        metacache.clear()
+        if fts.available():
+            fts.clear()
+        print("Cleared puenteo index and metadata cache.", file=sys.stderr)
+        return 0
+    if not fts.available():
+        print("SQLite FTS5 is not available in this Python; search falls back to scanning.", file=sys.stderr)
+        return 1
+    if not args.stats:
+        t0 = time.time()
+        sessions = list_sessions(providers=providers, cwd=cwd, limit=0)
+        done, todo = fts.refresh(sessions, progress=True)
+        print(f"Indexed {done}/{todo} changed session(s) of {len(sessions)} in {time.time() - t0:.1f}s", file=sys.stderr)
+    st = fts.stats()
+    if json_mode:
+        print(json.dumps(st, indent=2))
+    else:
+        print(f"index: {st['path']}")
+        print(f"  sessions: {st['sessions']}  messages: {st['messages']}  size: {st['bytes'] / 1e6:.1f} MB")
     return 0
 
 

@@ -309,6 +309,7 @@ def smart_pull(
         return msgs[:k] if k else msgs
     elif mode == "handoff":
         msgs = _handoff_pack(transcript, query=query)
+        return _apply_budget_priority(msgs, max_chars=max_chars, max_messages=k)
     else:
         msgs = last_n(transcript, last or 16)
 
@@ -352,6 +353,8 @@ def _query_pack(
             break
         m = by_idx[idx]
         t = m.text or ""
+        if not picked and len(t) > max_chars > 0:
+            t = clip(t, max_chars)
         if total + len(t) > max_chars and picked:
             remain = max_chars - total
             if remain > 400:
@@ -379,6 +382,44 @@ def _query_pack(
     return sorted(picked, key=lambda m: m.index)
 
 
+def _clipped(m: Message, n: int) -> Message:
+    return Message(role=m.role, text=clip(m.text or "", n), timestamp=m.timestamp, index=m.index, meta=m.meta)
+
+
+def _apply_budget_priority(
+    msgs: List[Message],
+    *,
+    max_chars: int,
+    max_messages: int,
+) -> List[Message]:
+    """
+    Handoff budget: the *latest* exchange matters most, then the opening goal,
+    then decisions in between. Fill in that priority order (each message capped
+    at a share of the budget), then return chronologically.
+    """
+    if not msgs:
+        return []
+    chrono = sorted(msgs, key=lambda m: m.index)
+    tail = list(reversed(chrono[-6:]))
+    head = chrono[:2]
+    middle = list(reversed([m for m in chrono if m not in tail and m not in head]))
+    order = tail[:2] + head[:1] + tail[2:] + head[1:] + middle
+    per_msg_cap = max(600, max_chars // 3)
+    picked: List[Message] = []
+    total = 0
+    for m in order:
+        if len(picked) >= max_messages:
+            break
+        remain = max_chars - total
+        if remain < 300:
+            break
+        cap = min(per_msg_cap, remain)
+        mm = m if len(m.text or "") <= cap else _clipped(m, cap)
+        picked.append(mm)
+        total += len(mm.text or "")
+    return sorted(picked, key=lambda m: m.index)
+
+
 def _apply_budget(
     msgs: List[Message],
     *,
@@ -389,6 +430,9 @@ def _apply_budget(
     total = 0
     for m in msgs:
         t = m.text or ""
+        if not out and max_chars > 0 and len(t) > max_chars:
+            out.append(_clipped(m, max_chars))
+            break
         if total + len(t) > max_chars and out:
             remain = max_chars - total
             if remain > 400:

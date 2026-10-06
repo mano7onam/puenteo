@@ -16,6 +16,27 @@ from ..models import Message, Session, Transcript
 from ..util import clean_title, cwd_matches, expand, strip_ansi, stringify_content
 
 
+def _role(o: dict) -> str:
+    """Gemini CLI writes ``type: user|gemini|info|error``; older dumps use ``role: user|model``."""
+    r = str(o.get("role") or o.get("type") or "").lower()
+    if r in ("user", "human"):
+        return "user"
+    if r in ("gemini", "model", "assistant"):
+        return "assistant"
+    if r in ("tool", "function"):
+        return "tool"
+    if r in ("info", "error", "system", "warning"):
+        return "system"
+    return "assistant"
+
+
+def _text(o: dict) -> str:
+    c = o.get("content")
+    if c is None:
+        c = o.get("parts") or o.get("text") or o.get("displayContent")
+    return stringify_content(c)
+
+
 def _root() -> Path:
     return Path(expand("~/.gemini"))
 
@@ -26,16 +47,16 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
         return []
     out: List[Session] = []
     # common CLI chat dumps
-    for pattern in (
-        "tmp/**/*.json",
-        "tmp/**/*.jsonl",
-        "history/**/*",
-        "sessions/**/*",
-        "chats/**/*",
-        "**/chat_history*",
-        "**/session-*.json",
-    ):
-        for f in root.glob(pattern):
+    # Only walk Gemini CLI's own dirs; ~/.gemini/antigravity is huge and owned elsewhere.
+    candidates = []
+    for sub in ("tmp", "history", "sessions", "chats"):
+        d = root / sub
+        if d.is_dir():
+            candidates.extend(d.rglob("*"))
+    candidates.extend(root.glob("chat_history*"))
+    candidates.extend(root.glob("session-*.json"))
+    for f in candidates:
+        if True:
             if not f.is_file():
                 continue
             # skip antigravity tree — owned by antigravity provider
@@ -88,8 +109,8 @@ def _from_file(path: Path, *, cwd: Optional[str] = None) -> Optional[Session]:
                     n += 1
                     if o.get("cwd") and not scwd:
                         scwd = str(o["cwd"])
-                    if (o.get("role") or "").lower() == "user" and title == path.stem:
-                        cand = clean_title(stringify_content(o.get("content") or o.get("text")))
+                    if _role(o) == "user" and (o.get("role") or o.get("type")) and title == path.stem:
+                        cand = clean_title(_text(o))
                         if cand:
                             title = cand
         elif path.suffix == ".json":
@@ -147,10 +168,13 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
                     if not line:
                         continue
                     o = json.loads(line)
-                    role = (o.get("role") or "assistant").lower()
+                    if not isinstance(o, dict) or ("sessionId" in o and not (o.get("type") or o.get("role"))):
+                        cwd = str(o.get("cwd") or cwd) if isinstance(o, dict) else cwd
+                        continue
+                    role = _role(o)
                     if role == "tool" and not include_tools:
                         continue
-                    add(role if role in ("user", "assistant", "system", "tool") else "assistant", stringify_content(o.get("content") or o.get("text")))
+                    add(role, _text(o), str(o.get("timestamp") or ""))
         elif path.suffix == ".json":
             data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
             items = []
@@ -162,8 +186,10 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
             for m in items:
                 if not isinstance(m, dict):
                     continue
-                role = (m.get("role") or "assistant").lower()
-                add(role if role in ("user", "assistant", "system", "tool") else "assistant", stringify_content(m.get("content") or m.get("text")))
+                role = _role(m)
+                if role == "tool" and not include_tools:
+                    continue
+                add(role, _text(m), str(m.get("timestamp") or ""))
         else:
             add("assistant", path.read_text(encoding="utf-8", errors="replace"))
     except Exception:

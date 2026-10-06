@@ -83,6 +83,19 @@ PROVIDER_ALIASES = {
 }
 
 
+_WARNED: set = set()
+
+
+def _warn_provider(name: str, err: Exception) -> None:
+    import os
+    import sys
+
+    if name in _WARNED or os.environ.get("PUENTEO_QUIET"):
+        return
+    _WARNED.add(name)
+    print(f"puenteo: warning: provider {name!r} failed: {err}", file=sys.stderr)
+
+
 def normalize_provider_name(name: str) -> str:
     n = (name or "").strip().lower()
     return PROVIDER_ALIASES.get(n, n)
@@ -141,7 +154,8 @@ def list_sessions(
             continue
         try:
             out.extend(mod.list_sessions(cwd=cwd))
-        except Exception:
+        except Exception as e:  # one broken store must not hide the others
+            _warn_provider(name, e)
             continue
     out.sort(key=lambda s: s.mtime, reverse=True)
 
@@ -165,18 +179,85 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
     return mod.load_transcript(session, include_tools=include_tools)
 
 
+class AmbiguousSessionError(LookupError):
+    """A session ref (prefix / title) matched more than one session."""
+
+    def __init__(self, ref: str, candidates: List[Session]):
+        self.ref = ref
+        self.candidates = candidates
+        from ..util import unique_prefixes
+
+        pref = unique_prefixes([c.session_id for c in candidates], min_len=8)
+        lines = [f"Ambiguous session ref {ref!r}: {len(candidates)} matches. Use a longer prefix:"]
+        for c in candidates[:12]:
+            lines.append(f"  {c.provider:12} {pref.get(c.session_id, c.session_id):20} {(c.title or '')[:60]}")
+        if len(candidates) > 12:
+            lines.append(f"  … and {len(candidates) - 12} more")
+        super().__init__("\n".join(lines))
+
+
+def _split_provider_ref(ref: str) -> "tuple[Optional[str], str]":
+    """``codex:01a0…`` → ("codex", "01a0…"). Plain refs and Windows paths pass through."""
+    if ":" in ref and not (len(ref) > 1 and ref[1] == ":"):
+        head, tail = ref.split(":", 1)
+        name = normalize_provider_name(head)
+        if name in PROVIDERS and tail:
+            return name, tail
+    return None, ref
+
+
+def _self_session_id() -> Optional[str]:
+    try:
+        from ..live import whoami
+
+        me = whoami()
+        return me.session_id if me else None
+    except Exception:
+        return None
+
+
 def resolve_session(
     ref: str,
     *,
     providers: Optional[List[str]] = None,
     cwd: Optional[str] = None,
+    allow_ambiguous: bool = False,
 ) -> Optional[Session]:
-    """Resolve by full/short session id, path, or unique title substring."""
+    """
+    Resolve a session reference.
+
+    Accepted refs:
+      - full id, ``provider:id``, or a unique id prefix
+      - ``@self`` (the session running this process), ``@last`` / ``@last:codex``
+      - a path to the session file
+      - a title substring (only when no id matches)
+
+    Raises :class:`AmbiguousSessionError` when a prefix/title matches several
+    sessions (unless ``allow_ambiguous``; then the newest wins).
+    """
     import os
 
     ref = (ref or "").strip()
     if not ref:
         return None
+
+    if ref in ("@self", "@me", "self"):
+        sid = _self_session_id()
+        if not sid:
+            return None
+        return resolve_session(sid, providers=providers)
+
+    if ref.startswith("@last"):
+        prov = ref.split(":", 1)[1] if ":" in ref else None
+        own = _self_session_id()
+        for s in list_sessions(providers=[prov] if prov else providers, cwd=cwd, limit=0):
+            if s.session_id != own:
+                return s
+        return None
+
+    prov_from_ref, ref = _split_provider_ref(ref)
+    if prov_from_ref:
+        providers = [prov_from_ref]
     if os.path.isfile(ref) or os.path.isdir(ref):
         path = os.path.abspath(os.path.expanduser(ref))
         path_l = path.replace("\\", "/")
@@ -231,29 +312,36 @@ def resolve_session(
                 return s
         return None
 
-    sessions = list_sessions(providers=providers, cwd=cwd, limit=800)
+    sessions = list_sessions(providers=providers, cwd=cwd, limit=0)
     ref_l = ref.lower()
 
-    # exact id
-    for s in sessions:
-        if s.session_id == ref:
-            return s
-    # prefix id
-    hits = [s for s in sessions if s.session_id.startswith(ref)]
-    if len(hits) == 1:
-        return hits[0]
-    if len(hits) > 1:
-        return hits[0]
+    def pick(hits: List[Session]) -> Optional[Session]:
+        # Same session can appear twice (e.g. a resumed Claude file); collapse by id.
+        uniq: List[Session] = []
+        seen = set()
+        for s in hits:
+            key = (s.provider, s.session_id)
+            if key not in seen:
+                seen.add(key)
+                uniq.append(s)
+        if not uniq:
+            return None
+        if len(uniq) == 1 or allow_ambiguous:
+            return uniq[0]
+        raise AmbiguousSessionError(ref, uniq)
 
-    # title substring
-    hits = [s for s in sessions if ref_l in (s.title or "").lower()]
-    if hits:
-        return hits[0]
+    exact = [s for s in sessions if s.session_id == ref]
+    if exact:
+        return exact[0]
 
-    # cwd path substring match in session cwd
-    hits = [s for s in sessions if ref_l in (s.cwd or "").lower()]
+    hits = [s for s in sessions if s.session_id.lower().startswith(ref_l)]
     if hits:
-        return hits[0]
+        return pick(hits)
+
+    if len(ref) >= 3:
+        hits = [s for s in sessions if ref_l in (s.title or "").lower()]
+        if hits:
+            return pick(hits)
 
     return None
 
@@ -325,7 +413,7 @@ def provider_store_status() -> dict:
 
         count = 0
         try:
-            count = len(list_sessions(providers=[name], limit=500))
+            count = len(list_sessions(providers=[name], limit=0))
         except Exception:
             count = 0
         if not exists and count > 0:

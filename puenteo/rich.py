@@ -567,8 +567,9 @@ def _load_codex(path: str, *, include_tools: bool, include_thinking: bool) -> Tr
             ts = o.get("timestamp") or ""
 
             if t == "session_meta":
-                session_id = payload.get("session_id") or payload.get("id") or session_id
-                cwd = payload.get("cwd") or cwd
+                if not session_id:
+                    session_id = payload.get("id") or payload.get("session_id") or session_id
+                    cwd = payload.get("cwd") or cwd
                 continue
 
             if t == "response_item":
@@ -631,6 +632,14 @@ def _load_codex(path: str, *, include_tools: bool, include_thinking: bool) -> Tr
                     text = payload.get("text") or payload.get("content") or ""
                     if text:
                         messages.append(Message(role="assistant", thinking=str(text), timestamp=ts, raw_type=et))
+
+    from .util import dedup_mirrored, norm_text_key
+
+    messages = dedup_mirrored(
+        messages,
+        key=lambda m: norm_text_key(m.role, m.text) if m.text and not m.tool_calls and not m.tool_results else None,
+        is_mirror=lambda m: m.raw_type in ("user_message", "agent_message"),
+    )
 
     if not title or title.startswith("rollout-"):
         # first user line

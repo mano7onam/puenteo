@@ -4,7 +4,7 @@ import glob
 import json
 import os
 import re
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ..models import Message, Session, Transcript
 from ..util import (
@@ -25,7 +25,8 @@ def _projects_root() -> str:
 
 
 def _encode_path(p: str) -> str:
-    return p.replace("/", "-").replace(".", "-")
+    """Claude Code project dir name: every non-alphanumeric char becomes ``-``."""
+    return re.sub(r"[^A-Za-z0-9]", "-", p)
 
 
 def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
@@ -57,7 +58,7 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
         except OSError:
             continue
 
-        title, real_cwd, sid = _peek(path)
+        title, real_cwd, sid = _peek_cached(path)
         sid = sid or os.path.splitext(os.path.basename(path))[0]
         real_cwd = real_cwd or approx_cwd
 
@@ -86,7 +87,7 @@ def session_from_path(path: str) -> Optional[Session]:
     path = expand(path)
     if not os.path.isfile(path):
         return None
-    title, cwd, sid = _peek(path)
+    title, cwd, sid = _peek_cached(path)
     sid = sid or os.path.splitext(os.path.basename(path))[0]
     st = os.stat(path)
     return Session(
@@ -100,7 +101,13 @@ def session_from_path(path: str) -> Optional[Session]:
     )
 
 
-def _peek(path: str) -> tuple[str, str, str]:
+def _peek_cached(path: str) -> Tuple[str, str, str]:
+    from ..metacache import cached
+
+    return tuple(cached("claude.peek", path, lambda: list(_peek(path))))  # type: ignore[return-value]
+
+
+def _peek(path: str) -> Tuple[str, str, str]:
     title = ""
     cwd = ""
     sid = ""
@@ -125,7 +132,7 @@ def _peek(path: str) -> tuple[str, str, str]:
                     cand = clean_title(str(o["title"]), 160)
                     if cand:
                         title = cand
-                if t == "user" and not title:
+                if t == "user" and not title and not o.get("isMeta"):
                     msg = o.get("message") or {}
                     text = stringify_content(msg.get("content"))
                     text = extract_user_query(text)
@@ -160,6 +167,9 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
                     title = cand
                 continue
             if t not in ("user", "assistant", "system"):
+                continue
+            # skill bodies, caveats, compaction summaries: injected, not said by anyone
+            if o.get("isMeta") or o.get("isCompactSummary") or o.get("isVisibleInTranscriptOnly"):
                 continue
             if o.get("cwd"):
                 cwd = o["cwd"]
@@ -209,12 +219,19 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
                 text = (text + "\n" + "\n".join(tool_bits)).strip()
             if not text.strip():
                 continue
+            # One API response is streamed as several jsonl lines sharing message.id
+            # (text block, then tool_use, …): merge them into one message.
+            mid = msg.get("id") if role == "assistant" else None
+            if mid and messages and messages[-1].meta.get("message_id") == mid:
+                messages[-1].text = (messages[-1].text + "\n" + text).strip()
+                continue
             messages.append(
                 Message(
                     role=role,
                     text=text,
                     timestamp=str(o.get("timestamp") or ""),
                     index=idx,
+                    meta={"message_id": mid} if mid else {},
                 )
             )
             idx += 1

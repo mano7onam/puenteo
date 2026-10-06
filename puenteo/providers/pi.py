@@ -32,8 +32,10 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
         reverse=True,
     )
     out: List[Session] = []
-    for path in files[:400]:
-        meta = _peek(path)
+    from ..metacache import cached
+
+    for path in files:
+        meta = cached("pi.meta", path, lambda: _peek(path))
         if not meta:
             continue
         scwd = meta.get("cwd") or ""

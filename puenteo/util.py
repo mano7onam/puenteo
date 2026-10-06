@@ -86,6 +86,8 @@ def cwd_matches(filter_cwd: Optional[str], session_cwd: Optional[str]) -> bool:
         return False
 
     raw = str(filter_cwd).strip()
+    if raw in (".", "..") or raw.startswith(("./", "../", ".\\", "..\\")):
+        raw = os.path.abspath(raw)
     sess = path_slash(normalize_path(session_cwd))
     if not sess:
         return False
@@ -168,6 +170,59 @@ def format_size(n: int) -> str:
 def short_id(sid: str, n: int = 8) -> str:
     sid = sid or ""
     return sid if len(sid) <= n else sid[:n]
+
+
+def dedup_mirrored(items, *, key, is_mirror, window: int = 12):
+    """
+    Drop "mirror" items that repeat a recent primary item with the same key.
+
+    Codex logs each turn twice — ``response_item`` (primary) and ``event_msg``
+    (mirror) — not always adjacently and not always in the same order. We keep
+    the first copy of each (role, normalized text) within ``window`` items, and
+    when the mirror came first, the later primary replaces it.
+    """
+    out = []
+    recent = {}  # key → position in out
+    for it in items:
+        k = key(it)
+        if not k:
+            out.append(it)
+            continue
+        pos = recent.get(k)
+        if pos is not None and len(out) - pos <= window:
+            if is_mirror(out[pos]) and not is_mirror(it):
+                out[pos] = it
+            continue
+        recent[k] = len(out)
+        out.append(it)
+    return out
+
+
+def norm_text_key(role: str, text: str) -> Optional[tuple]:
+    t = " ".join((text or "").split())
+    return (role, t[:2000]) if t else None
+
+
+def unique_prefixes(ids: Iterable[str], *, min_len: int = 8) -> dict:
+    """
+    Shortest prefix (>= ``min_len``) that is unique among ``ids``, git-style.
+
+    Codex ids are UUIDv7 (time-ordered), so 8 chars collide constantly;
+    this grows the prefix only as much as needed.
+    """
+    uniq = sorted(set(i for i in ids if i))
+    out = {}
+    for i, sid in enumerate(uniq):
+        need = min_len
+        for j in (i - 1, i + 1):
+            if 0 <= j < len(uniq):
+                other = uniq[j]
+                k = 0
+                while k < min(len(sid), len(other)) and sid[k] == other[k]:
+                    k += 1
+                need = max(need, k + 1)
+        out[sid] = sid[: min(need, len(sid))]
+    return out
 
 
 def decode_url_path(name: str) -> str:
@@ -266,6 +321,11 @@ def is_noise_user_text(text: str) -> bool:
     if t.startswith("<action_safety>") or "You are Grok" in t[:200]:
         return True
     if t.startswith("<environment_context>") or t.startswith("<local-command-caveat>"):
+        return True
+    # Codex / agent harness injections: AGENTS.md dumps, <*_context>, <permissions …>
+    if t.startswith("# AGENTS.md instructions for ") or t.startswith("<INSTRUCTIONS>"):
+        return True
+    if re.match(r"^<(\w+_context|permissions|turn_aborted|user_instructions|skill)\b", t):
         return True
     # Claude slash-command / local-command wrappers (not real user intent)
     if t.startswith("<local-command-") or "<local-command-" in t[:80]:

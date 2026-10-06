@@ -111,10 +111,13 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
     for m in items:
         if not isinstance(m, dict):
             continue
-        role = (m.get("role") or "assistant").lower()
+        inner = m.get("message") if isinstance(m.get("message"), dict) else m
+        role = str(inner.get("role") or m.get("role") or "assistant").lower()
         if role in ("human",):
             role = "user"
-        text = strip_ansi(stringify_content(m.get("content") or m.get("message") or m.get("text")))
+        if role == "thinking":
+            continue
+        text = strip_ansi(stringify_content(inner.get("content") or inner.get("text") or m.get("text")))
         if not text.strip():
             continue
         if role == "tool" and not include_tools:
