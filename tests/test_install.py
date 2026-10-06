@@ -18,9 +18,13 @@ def home(tmp_path, monkeypatch):
         "model": "opus",
         "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "say done"}]}]},
     }))
-    (h / ".codex" / "skills" / "puenteo").symlink_to(tmp_path / "gone" / "skills" / "puenteo")
+    try:
+        (h / ".codex" / "skills" / "puenteo").symlink_to(tmp_path / "gone" / "skills" / "puenteo")
+    except OSError:  # Windows without symlink privilege
+        pass
     monkeypatch.setenv("HOME", str(h))
-    monkeypatch.setenv("PATH", "/nonexistent")  # no claude/codex CLIs → their MCP steps skip
+    monkeypatch.setenv("USERPROFILE", str(h))
+    monkeypatch.setenv("PATH", str(tmp_path / "nonexistent"))  # no claude/codex CLIs → their MCP steps skip
     return h
 
 

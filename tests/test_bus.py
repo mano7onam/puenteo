@@ -13,6 +13,7 @@ import pytest
 def bus(tmp_path, monkeypatch):
     monkeypatch.setenv("PUENTEO_BUS", str(tmp_path / "bus.db"))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
     monkeypatch.setenv("PUENTEO_HOME", str(tmp_path / "ph"))
     monkeypatch.setenv("PUENTEO_NO_PUSH", "1")
     for v in ("CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID", "PUENTEO_SESSION", "PUENTEO_AS"):
