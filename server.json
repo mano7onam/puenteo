@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
   "name": "io.github.mano7onam/puenteo",
   "title": "Puenteo",
-  "description": "Bridge between coding-agent sessions: search history of every local agent and message running sessions.",
+  "description": "Let coding agents talk: search every agent session's history and message live sessions.",
   "repository": {
     "url": "https://github.com/mano7onam/puenteo",
     "source": "github"

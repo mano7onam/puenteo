@@ -170,3 +170,16 @@ def test_jsonc_config_is_refused_not_mangled(home):
     steps = plan_and_apply(only=["gemini"])
     assert "// my comment" in p.read_text()
     assert any(s.action.startswith("failed") for s in steps if s.kind == "mcp")
+
+
+def test_mcp_registry_manifest():
+    import json
+    import pathlib
+
+    p = pathlib.Path(__file__).resolve().parents[1] / "server.json"
+    if not p.exists():
+        pytest.skip("not a source checkout")
+    d = json.loads(p.read_text())
+    assert len(d["description"]) <= 100, "MCP Registry limit"
+    readme = (p.parent / "README.md").read_text()
+    assert f"mcp-name: {d['name']}" in readme, "PyPI ownership marker"
