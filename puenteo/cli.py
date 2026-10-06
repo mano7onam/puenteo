@@ -111,13 +111,16 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="puenteo",
         description=(
-            f"{APP_NAME} — the bridge between coding agents. "
-            "List, search, and export Claude Code / Codex / Grok / Pi sessions "
-            "to md/html/pdf/json/zip/csv/xml/yaml."
+            f"{APP_NAME} — the bridge between coding agents.\n"
+            "History: search/outline/pull/export sessions of Claude Code, Codex, Gemini, Antigravity,\n"
+            "Cursor, Copilot, OpenCode, Grok, Pi, Qwen, Continue, Aider, OpenHands, Goose.\n"
+            "Live: ps, send, inbox, reply, wait, watch, channels, claims — between running sessions."
         ),
         epilog=(
-            "Session refs: full uuid, unique prefix (e.g. 3627012b), path, or title substring. "
-            "Handoff recipe: list --cwd … → outline <id> → pull --mode decisions|query."
+            "Session refs: unique id prefix, provider:id, @self, @last[:provider], path, or title.\n"
+            "History:  puenteo search 'topic' --exclude-self → puenteo outline <ref> → puenteo pull <ref>\n"
+            "Live:     puenteo ps → puenteo send <agent:id|@name|#chan|cwd:.|*> 'text' --wait 300\n"
+            "Setup:    puenteo install [--hooks] · puenteo doctor"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
