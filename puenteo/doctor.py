@@ -39,6 +39,22 @@ def checks() -> List[Tuple[str, str, str]]:
         out.append(("message bus", OK, f"{bus_db_path()}  ({n} live peer(s))"))
     except Exception as e:
         out.append(("message bus", FAIL, str(e)))
+    try:
+        from .mesh import service
+        from .mesh.node import PEER_STALE_S, _db, node_name
+        from .mesh.nostr import Identity
+        import time as _t
+
+        with Bus() as b:
+            nm = node_name(b, Identity.load())
+            online = _db(b).execute("SELECT COUNT(*) FROM mesh_nodes WHERE last_seen>=?", (_t.time() - PEER_STALE_S,)).fetchone()[0]
+        if service.running():
+            out.append(("mesh", OK, f"bridge running as {nm}, {online} online peer machine(s)"))
+        else:
+            out.append(("mesh", WARN, f"bridge not running (node {nm}); other machines can't reach your sessions → "
+                                      "`puenteo mesh service install`"))
+    except Exception as e:
+        out.append(("mesh", WARN, str(e)))
     me = whoami()
     out.append(("whoami", OK if me else WARN, f"{me.address} via {me.how}" if me else "not inside an agent session (fine in a plain shell)"))
 

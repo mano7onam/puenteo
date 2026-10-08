@@ -129,6 +129,8 @@ class Gateway:
                 return 200, [m.to_dict() for m in msgs]
         if path == "/api/channels":
             return 200, call("channels", {})
+        if path == "/api/mesh":
+            return 200, {"peers": call("mesh_peers", {}), "offers": call("find", {"query": q.get("q", ""), "limit": 20})}
         if path == "/api/claims":
             return 200, call("claims", {})
         if path == "/api/inbox":

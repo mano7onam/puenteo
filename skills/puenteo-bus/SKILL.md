@@ -37,7 +37,7 @@ puenteo join --name reviewer -c release                             # pick an @n
 
 ## Other machines (mesh)
 
-If `puenteo mesh up` runs on this machine, sessions on other computers are reachable too:
+If the mesh bridge runs on this machine (`puenteo mesh service status`; the user enables it once with `puenteo mesh service install`), sessions on other computers are reachable too:
 
 ```bash
 puenteo mesh peers                          # machines + their live sessions

@@ -302,3 +302,55 @@ def test_direct_endpoint_rejects_non_http(tmp_path, monkeypatch):
     ev = n.ident.sign(1, "x")
     assert n._post_direct("file:///etc/passwd", ev) is False
     assert n._post_direct("ftp://x/", ev) is False
+
+
+def test_goodbye_and_stale_peers(boxes):
+    a, b, c = boxes
+    from puenteo.mesh import node as nd
+
+    _offer(c, "codex:ui", "react frontend", ["frontend"])
+    assert _until(lambda: len(nd.find(a.bus(), "frontend")) == 1)
+    with c:
+        c.node.stop()  # says goodbye
+    assert _until(lambda: not nd.find(a.bus(), "frontend")), "offline node's offers must disappear"
+    with a:
+        row = nd._db(a.bus()).execute("SELECT last_seen FROM mesh_nodes WHERE name='charlie'").fetchone()
+    assert row and row[0] == 0.0
+
+
+def test_replayed_old_announcement_is_ignored(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.setenv("PUENTEO_BUS", str(tmp_path / "b.db"))
+    monkeypatch.setenv("PUENTEO_HOME", str(tmp_path / "h"))
+    from puenteo.mesh import crypto
+    from puenteo.mesh import node as nd
+    from puenteo.mesh.nostr import KIND_APP, Identity
+
+    me = nd.Node(ident=Identity(crypto.generate_secret()), name="me", relays=[], lan=False)
+    ghost = Identity(crypto.generate_secret())
+    old = ghost.sign(KIND_APP, json.dumps({"proto": nd.PROTO, "name": "ghost", "sessions": []}),
+                     [["d", "puenteo:node"], ["t", "puenteo"]], created_at=int(time.time()) - 3 * 86400)
+    me._on_event(old, "relay")
+    assert nd._db(me.bus).execute("SELECT COUNT(*) FROM mesh_nodes").fetchone()[0] == 0
+
+
+def test_restart_does_not_redeliver(boxes):
+    """Relays replay recent DMs on reconnect; a restarted node must not deliver them twice."""
+    a, b, _ = boxes
+    _offer(b, "claude:pay", "payments", ["payments"])
+    with a:
+        a.bus().send("codex:asker", "claude:pay@bravo", "only once please")
+    bb = b.bus()
+    with b:
+        assert _until(lambda: len(bb.inbox("claude:pay", unread_only=False, mark_read=False)) == 1)
+        b.node.stop(goodbye=False)
+        from puenteo.mesh import node as nd
+
+        b.node = nd.Node(ident=b.ident, name="bravo", relays=[r.url for r in a.node.pool.relays], lan=False)
+        b.node.start()
+        b.node.pool.wait_connected(5)
+    time.sleep(1.5)
+    with b:
+        msgs = [m for m in bb.inbox("claude:pay", unread_only=False, mark_read=False) if m.body == "only once please"]
+    assert len(msgs) == 1
