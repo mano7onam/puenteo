@@ -381,12 +381,17 @@ class Server:
         def _mesh_peers(a):
             from .mesh import node as nd
 
+            from .mesh import service
+
             with Bus() as b:
                 con = nd._db(b)
-                rows = con.execute("SELECT name, trusted, last_seen, sessions FROM mesh_nodes WHERE blocked=0 "
-                                   "ORDER BY last_seen DESC LIMIT 50").fetchall()
+                rows = con.execute("SELECT name, trusted, last_seen, sessions FROM mesh_nodes WHERE blocked=0 AND "
+                                   "last_seen>=? ORDER BY last_seen DESC LIMIT 50", (time.time() - nd.PEER_STALE_S,)).fetchall()
                 me = nd.config_get(b, "name")
-            return {"this_node": me, "nodes": [
+            return {"this_node": me, "bridge_running": service.running(),
+                    "hint": None if service.running() else "the mesh bridge is not running: ask the user to run "
+                                                           "`puenteo mesh service install`",
+                    "nodes": [
                 {"node": r[0], "trusted": bool(r[1]), "seen_s_ago": int(time.time() - (r[2] or 0)),
                  "sessions": [s.get("address", "") + "@" + r[0] for s in json.loads(r[3] or "[]")][:16]} for r in rows]}
 

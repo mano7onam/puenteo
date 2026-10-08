@@ -23,6 +23,15 @@ The mesh extends the local bus so that sessions on different machines can find e
 3. **Direct peers**: `puenteo mesh peer add http://host:7357` for a Tailscale, VPN or LAN address.
 4. **Own relay**: `puenteo mesh relay` is a tiny Nostr relay built into puenteo (WebSocket, in memory plus SQLite) for teams that don't want public relays.
 
+## Running it
+
+- `puenteo mesh service install` starts the bridge at login (macOS launchd, Linux systemd --user, Windows Task Scheduler) and restarts it if it crashes. `status` and `uninstall` do what they say.
+- `puenteo mesh up` runs the same bridge in the foreground.
+- `puenteo doctor` and the MCP `mesh_peers` tool report whether the bridge is running (it writes a heartbeat every 30 s).
+- Offers and rooms you add while the bridge runs are announced and joined within 30 s, with no restart.
+- On a clean stop (Ctrl+C or SIGTERM) the node publishes an "offline" announcement, so peers drop it right away. A node that goes quiet for about 16 minutes is considered offline, and its offers disappear from `find`. Old announcements that relays replay are ignored. `puenteo mesh peers --all` also shows offline nodes, and `mesh forget <node>` removes one.
+- Each event is delivered exactly once: a persistent seen-set means relay replays after a reconnect or restart, and the same event arriving over both the LAN and a relay, are not delivered twice.
+
 ## Discovery and the bazaar
 
 - `puenteo mesh announce` publishes this node and the offers of its sessions.

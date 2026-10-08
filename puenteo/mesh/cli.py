@@ -28,13 +28,17 @@ def add_parsers(sub, common, as_flag) -> None:
     up.add_argument("--port", type=int, default=7358, help="Direct HTTP port for LAN/VPN peers (0 = off)")
     up.add_argument("--relay", action="append", default=None, help="Relay URL (repeatable; overrides config)")
     msub.add_parser("status", help="Identity, relays, peers, counters")
-    msub.add_parser("peers", help="Known nodes and their live sessions")
+    msub.add_parser("peers", help="Online nodes and their live sessions (--all: include offline)").add_argument("--all", action="store_true")
+    fg = msub.add_parser("forget", help="Remove a node from the local peer list")
+    fg.add_argument("node")
     for n, h in (("trust", "Allow any message from this node"), ("untrust", "Remove trust"),
                  ("block", "Drop everything from this node"), ("unblock", "Unblock a node")):
         x = msub.add_parser(n, help=h)
         x.add_argument("node", help="node name, npub or hex pubkey")
     nm = msub.add_parser("name", help="Show or set this node's name")
     nm.add_argument("name", nargs="?")
+    sv = msub.add_parser("service", help="Run the bridge in the background at login (launchd / systemd / Task Scheduler)")
+    sv.add_argument("action", choices=["install", "uninstall", "status"])
     rl = msub.add_parser("relays", help="Show or set relays (comma list, or 'none' for LAN/direct only)")
     rl.add_argument("relays", nargs="?")
     pa = msub.add_parser("peer", help="Add a direct peer endpoint (LAN/VPN/Tailscale): http://host:7358")
@@ -143,7 +147,10 @@ def _mesh(args, json_mode: bool) -> int:
             "", "Others reach your sessions as  <address>@" + name + "  (e.g. claude:1234@" + name + ")"]))
         return 0
     if c == "peers":
-        rows = con.execute("SELECT pubkey, name, trusted, blocked, last_seen, via, sessions FROM mesh_nodes ORDER BY last_seen DESC").fetchall()
+        show_all = getattr(args, "all", False)
+        cutoff = time.time() - nd.PEER_STALE_S
+        rows = con.execute("SELECT pubkey, name, trusted, blocked, last_seen, via, sessions FROM mesh_nodes"
+                           " WHERE ? OR last_seen >= ? OR trusted=1 ORDER BY last_seen DESC", (1 if show_all else 0, cutoff)).fetchall()
         if json_mode:
             print(json.dumps([dict(pubkey=r[0], name=r[1], trusted=bool(r[2]), blocked=bool(r[3]), last_seen=r[4], via=r[5],
                                    sessions=json.loads(r[6] or "[]")) for r in rows], indent=2, ensure_ascii=False))
@@ -154,9 +161,20 @@ def _mesh(args, json_mode: bool) -> int:
         for pub, nm, tr, bl, seen, via, sess in rows:
             flag = "trusted" if tr else "blocked" if bl else ""
             ago = int(time.time() - (seen or 0))
-            print(f"{nm:24} {flag:8} via={via or '-':5} seen={ago}s ago  {pub[:12]}…")
+            state = "online" if (seen or 0) >= cutoff else "offline"
+            print(f"{nm:24} {state:7} {flag:8} via={via or '-':5} seen={_ago(ago)}  {pub[:12]}…")
             for s in json.loads(sess or "[]")[:8]:
                 print(f"    {s.get('address')}@{nm}  {s.get('name') or ''}  {s.get('cwd_tail') or ''}")
+        return 0
+    if c == "forget":
+        node = nd.Node(ident=ident, name=name, relays=[], lan=False)
+        pub = node.resolve_node(args.node)
+        if not pub:
+            print(f"error: unknown node {args.node!r}", file=sys.stderr)
+            return 2
+        con.execute("DELETE FROM mesh_nodes WHERE pubkey=?", (pub,))
+        con.execute("DELETE FROM mesh_offers WHERE pubkey=? AND local=0", (pub,))
+        print(f"forgot {args.node}")
         return 0
     if c in ("trust", "untrust", "block", "unblock"):
         node = nd.Node(ident=ident, name=name, relays=[], lan=False)
@@ -199,6 +217,11 @@ def _mesh(args, json_mode: bool) -> int:
         from .relay import serve_relay
 
         return serve_relay(port=args.port)
+    if c == "service":
+        from . import service
+
+        print(getattr(service, args.action)())
+        return 0
     return 2
 
 
@@ -217,12 +240,26 @@ def _up(args, bus, ident, name) -> int:
     print(f"[mesh] relays: {', '.join(rel) or 'none'}  lan: {'on' if not args.no_lan else 'off'}  direct: "
           f"{'http://<this-host>:' + str(args.port) if args.port else 'off'}", file=sys.stderr, flush=True)
     print(f"[mesh] your sessions are reachable as <address>@{name}", file=sys.stderr, flush=True)
+    import signal
+
+    def _term(*_):
+        raise KeyboardInterrupt
+
+    try:
+        signal.signal(signal.SIGTERM, _term)
+    except (ValueError, OSError):
+        pass
     try:
         while True:
             time.sleep(3600)
     except KeyboardInterrupt:
         node.stop()
+        print("[mesh] stopped (said goodbye to peers)", file=sys.stderr, flush=True)
     return 0
+
+
+def _ago(s: int) -> str:
+    return f"{s}s ago" if s < 120 else f"{s // 60}m ago" if s < 7200 else f"{s // 3600}h ago" if s < 172800 else "long ago"
 
 
 def _me(args) -> str:
@@ -260,7 +297,7 @@ def _offer(args, json_mode: bool) -> int:
     name = nd.node_name(bus, _ident())
     _out({"id": oid, "address": f"{me}@{name}"}, json_mode,
          f"offer {oid} published for {me}  (others: puenteo ask {oid} \"…\"  or  {me}@{name})\n"
-         "It is announced by `puenteo mesh up`; requests to this session are now allowed in.")
+         "A running `puenteo mesh up` announces it within 30 s; requests to this session are now allowed in.")
     return 0
 
 
@@ -313,7 +350,7 @@ def _room(args, json_mode: bool) -> int:
         con.execute("INSERT OR REPLACE INTO mesh_rooms(name, secret, joined) VALUES (?,?,?)", (args.name, args.secret, time.time()))
         bus.subscribe(_me(args), args.name)
         print(f"joined room #{args.name}{' (private)' if args.secret else ''}. Post: puenteo send '#{args.name}@*' \"…\""
-              "\n(restart `puenteo mesh up` if it is running so it subscribes to the room)")
+              "\n(a running `puenteo mesh up` picks this up within 30 s)")
         return 0
     if c == "leave":
         con.execute("DELETE FROM mesh_rooms WHERE name=?", (args.name,))

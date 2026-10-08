@@ -86,7 +86,8 @@ All messages live in one local SQLite file (`puenteo` state dir) and nothing lea
 Sessions on **different computers** find each other and talk peer to peer: one to one, or many to many in rooms. There are no servers to run:
 
 ```bash
-puenteo mesh up                         # on each machine: joins the LAN + public Nostr relays
+puenteo mesh service install            # on each machine, once: runs the bridge at login (launchd/systemd/Task Scheduler)
+# or in the foreground: puenteo mesh up
 puenteo mesh peers                      # other machines and their live sessions
 puenteo send claude:8765@laptop "…"     # any local address + @node reaches another machine
 puenteo offer "I know the payments service, can run its tests" -t payments   # publish to the bazaar

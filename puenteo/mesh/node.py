@@ -28,6 +28,7 @@ from .nostr import DEFAULT_RELAYS, KIND_APP, KIND_DM, KIND_ROOM, Event, Identity
 PROTO = "puenteo/1"
 MCAST_GRP, MCAST_PORT = "239.255.77.57", 47357
 ANNOUNCE_EVERY_S = 300
+PEER_STALE_S = 3 * ANNOUNCE_EVERY_S + 60  # a node silent this long is considered offline
 MAX_REMOTE_BODY = 16_000
 REMOTE_RATE = 60          # inbound messages per node per 10 min
 SCHEMA = """
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS mesh_threads (
     thread TEXT PRIMARY KEY, pubkey TEXT, created REAL
 );
 CREATE TABLE IF NOT EXISTS mesh_stats (k TEXT PRIMARY KEY, v INTEGER);
+CREATE TABLE IF NOT EXISTS mesh_seen (id TEXT PRIMARY KEY, at REAL);
 CREATE TABLE IF NOT EXISTS mesh_config (k TEXT PRIMARY KEY, v TEXT);
 """
 
@@ -121,7 +123,9 @@ class Node:
 
         self.bus_path = self.bus_path or str(bus_db_path())
         self._tls = threading.local()
+        self._dirty_announce = False
         _db(self.bus)
+        self._offers_sig = ""
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._rate: Dict[str, List[float]] = {}
@@ -156,7 +160,19 @@ class Node:
         threading.Thread(target=self._outbox_loop, daemon=True, name="mesh outbox").start()
         threading.Thread(target=self._announce_loop, daemon=True, name="mesh announce").start()
 
-    def stop(self) -> None:
+    def stop(self, goodbye: bool = True) -> None:
+        """Stop; by default publish a final 'offline' announcement so peers drop us right away."""
+        if goodbye and not self._stop.is_set():
+            try:
+                content = {"proto": PROTO, "name": self.name, "offline": True, "sessions": [], "offers": []}
+                ev = self.ident.sign(KIND_APP, json.dumps(content), [["d", "puenteo:node"], ["t", "puenteo"], ["name", self.name]])
+                if self.pool:
+                    self.pool.publish(ev)
+                    time.sleep(0.5)  # let the relay writers flush
+                if self.lan:
+                    self._lan_send(ev)
+            except Exception:
+                pass
         self._stop.set()
         if self.pool:
             self.pool.close()
@@ -194,12 +210,25 @@ class Node:
 
     def _announce_loop(self) -> None:
         time.sleep(1.0)
+        last = 0.0
         while not self._stop.is_set():
             try:
-                self.announce()
+                config_set(self.bus, "heartbeat", str(time.time()))  # `mesh service status`, doctor, MCP
+                sig = repr(_db(self.bus).execute(
+                    "SELECT group_concat(id) FROM mesh_offers WHERE local=1 AND expires>?", (time.time(),)).fetchone()) + \
+                    repr(_db(self.bus).execute("SELECT group_concat(name || ':' || secret) FROM mesh_rooms").fetchone())
+                if sig != self._offers_sig:
+                    if self._offers_sig:
+                        self._dirty_announce = True
+                        self._subscribe_rooms()  # newly joined rooms take effect without a restart
+                    self._offers_sig = sig
+                if time.time() - last >= ANNOUNCE_EVERY_S or self._dirty_announce:
+                    self._dirty_announce = False
+                    self.announce()
+                    last = time.time()
             except Exception as e:
                 self.log(f"announce failed: {e}")
-            self._stop.wait(ANNOUNCE_EVERY_S)
+            self._stop.wait(30)
 
     def _learn_node(self, ev: Event, via: str, endpoint: str = "") -> None:
         try:
@@ -208,6 +237,8 @@ class Node:
             return
         if info.get("proto") != PROTO or ev.pubkey == self.ident.pubhex:
             return
+        if time.time() - ev.created_at > PEER_STALE_S and not info.get("offline"):
+            return  # a stale announcement replayed by a relay: that node is not around
         name = re.sub(r"[^\w.-]", "-", str(info.get("name") or ev.pubkey[:8]))[:64]
         con = _db(self.bus)
         with self._lock:
@@ -224,8 +255,9 @@ class Node:
                 " ON CONFLICT(pubkey) DO UPDATE SET name=excluded.name, last_seen=excluded.last_seen, via=excluded.via,"
                 " endpoints=excluded.endpoints, sessions=excluded.sessions, info=excluded.info,"
                 " announced_at=excluded.announced_at",
-                (ev.pubkey, name, time.time(), via, json.dumps(sorted(eps)), json.dumps(info.get("sessions", [])),
-                 json.dumps({k: info.get(k) for k in ("rooms_public",)}), float(ev.created_at)),
+                (ev.pubkey, name, 0.0 if info.get("offline") else float(ev.created_at), via, json.dumps(sorted(eps)),
+                 json.dumps(info.get("sessions", [])), json.dumps({k: info.get(k) for k in ("rooms_public",)}),
+                 float(ev.created_at)),
             )
             con.execute("DELETE FROM mesh_offers WHERE pubkey=? AND local=0", (ev.pubkey,))
             for o in info.get("offers", [])[:32]:
@@ -350,9 +382,19 @@ class Node:
             return False
 
     # ------------------------------------------------------------ inbound
+    def _first_time(self, ev_id: str) -> bool:
+        """Persistent dedup across restarts: relays replay recent events on every (re)connect."""
+        con = _db(self.bus)
+        cur = con.execute("INSERT OR IGNORE INTO mesh_seen(id, at) VALUES (?, ?)", (ev_id, time.time()))
+        if cur.rowcount and hash(ev_id) % 200 == 0:
+            con.execute("DELETE FROM mesh_seen WHERE at < ?", (time.time() - 2 * 86400,))
+        return cur.rowcount == 1
+
     def _on_event(self, ev: Event, via: str = "relay") -> None:
         if ev.pubkey == self.ident.pubhex:
             return
+        if ev.kind in (KIND_DM, KIND_ROOM) and not self._first_time(ev.id):
+            return  # already delivered (replay after reconnect/restart, or the same event via LAN and relay)
         try:
             if ev.kind == KIND_APP and ev.tag("d") == "puenteo:node":
                 self._learn_node(ev, via)
@@ -600,7 +642,8 @@ def find(bus: Bus, query: str, *, limit: int = 10) -> List[Dict[str, Any]]:
     q = [t for t in tokenize(query) if len(t) > 1]
     rows = con.execute(
         "SELECT o.id, o.node, o.address, o.text, o.tags, o.local, n.last_seen FROM mesh_offers o"
-        " LEFT JOIN mesh_nodes n ON n.pubkey=o.pubkey WHERE o.expires>?", (time.time(),)
+        " LEFT JOIN mesh_nodes n ON n.pubkey=o.pubkey WHERE o.expires>? AND (o.local=1 OR n.last_seen>=?)",
+        (time.time(), time.time() - PEER_STALE_S)
     ).fetchall()
     docs = []
     for oid, node, addr, text, tags, local, seen in rows:

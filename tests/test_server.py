@@ -124,3 +124,8 @@ def test_dashboard_page(srv):
     with urllib.request.urlopen(srv + "/", timeout=5) as r:
         html = r.read().decode()
     assert "<title>puenteo</title>" in html and "EventSource" in html
+
+
+def test_mesh_endpoint(srv):
+    code, r = call(srv + "/api/mesh")
+    assert code == 200 and "peers" in r and "offers" in r and "bridge_running" in r["peers"]

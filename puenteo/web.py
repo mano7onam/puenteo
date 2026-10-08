@@ -34,6 +34,8 @@ input,textarea,button{font:inherit;color:inherit;background:var(--bg);border:1px
 <div style="display:grid;gap:16px;align-content:start">
  <section><h2>Live sessions</h2><div id="ps" class="list"><div class="empty">loading…</div></div></section>
  <section><h2>Claims</h2><div id="claims" class="list"><div class="empty">none</div></div></section>
+ <section><h2>Other machines <span id="meshstate" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2><div id="mesh" class="list"><div class="empty">loading…</div></div></section>
+ <section><h2>Bazaar offers</h2><div id="offers" class="list"><div class="empty">none</div></div></section>
 </div>
 <div style="display:grid;gap:16px;align-content:start">
  <section><h2>Bus traffic</h2><div id="feed"></div>
@@ -58,6 +60,12 @@ document.getElementById('f').onsubmit=async e=>{e.preventDefault();try{await api
 async function search(){const q=document.getElementById('q').value.trim();if(!q)return;const h=document.getElementById('hits');h.innerHTML='<div class="empty">searching…</div>';
  try{const r=await api('/api/search?q='+encodeURIComponent(q));h.innerHTML=r.length?r.map(x=>`<div class="hit"><div class="a" style="font:12px ui-monospace,monospace;color:var(--accent)">${esc(x.session)} #${x.msg} ${esc(x.role)}</div><div>${esc(x.snippet)}</div><div class="s">${esc(x.title)} · ${esc(x.cwd)}</div></div>`).join(''):'<div class="empty">no hits</div>'}catch(e){h.innerHTML='<div class="empty">'+esc(e.message)+'</div>'}}
 document.getElementById('go').onclick=search;document.getElementById('q').onkeydown=e=>{if(e.key==='Enter')search()};
-ps();claims();setInterval(ps,5000);setInterval(claims,15000);
+async function mesh(){try{const r=await api('/api/mesh');const p=r.peers||{};
+ meshstate.textContent=p.bridge_running?`· ${esc(p.this_node)} · bridge on`:'· bridge off (puenteo mesh service install)';
+ const rows=(p.nodes||[]).map(n=>`<div class="row"><div class="t">${esc(n.node)}${n.trusted?'<span class="tag">trusted</span>':''}</div><div class="c">${n.sessions.length} session(s) · seen ${n.seen_s_ago}s ago</div>${n.sessions.slice(0,4).map(s=>`<div class="a" data-a="${esc(s)}">${esc(s)}</div>`).join('')}</div>`);
+ document.getElementById('mesh').innerHTML=rows.length?rows.join(''):'<div class="empty">no other machines online</div>';
+ document.getElementById('offers').innerHTML=(r.offers||[]).length?r.offers.map(o=>`<div class="row" data-a="${esc(o.address)}"><div class="t">${esc(o.text)}</div><div class="a">${esc(o.address)}</div><div class="c">${esc((o.tags||[]).join(', '))}</div></div>`).join(''):'<div class="empty">no offers (publish one: puenteo offer "…")</div>';
+ document.querySelectorAll('#mesh [data-a], #offers [data-a]').forEach(e=>e.onclick=()=>{to.value=e.dataset.a;text.focus()})}catch(e){}}
+ps();claims();mesh();setInterval(ps,5000);setInterval(claims,15000);setInterval(mesh,20000);
 </script></body></html>
 """

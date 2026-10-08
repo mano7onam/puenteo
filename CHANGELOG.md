@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.0 — 2026-10-08
+
+- `puenteo mesh service install|uninstall|status`: the bridge runs in the background at login (launchd, systemd --user, Task Scheduler), restarts on crash and stops cleanly on SIGTERM.
+- Exactly-once delivery: a persistent seen-set stops relay replays after a reconnect or restart from being delivered again.
+- Presence: heartbeat, an "offline" goodbye on stop, and offline detection (silent for about 16 min). Replayed old announcements are ignored and offline nodes' offers are hidden. New commands `mesh peers --all` and `mesh forget`.
+- Offers and rooms take effect within 30 s without restarting the bridge.
+- `doctor` and the MCP `mesh_peers` tool report the bridge state. The dashboard has "Other machines" and "Bazaar offers" panels (`/api/mesh`).
+- Verified live: a real Claude Code session on this Mac used MCP `find` and `send` to ask an agent on another machine over public Nostr relays and got its answer. The reverse direction woke this session through `puenteo watch`, and it worked again after a service restart.
+
 ## 0.11.0 — 2026-10-07
 
 **Mesh: sessions across machines, P2P, no servers.**
