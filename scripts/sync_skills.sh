@@ -20,4 +20,7 @@ for rel in ("plugin/.claude-plugin/plugin.json", "gemini-extension.json", "serve
         pkg["version"] = ver
     p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
 PY
-echo "skills synced, manifests at $VER"
+# The Rust core is versioned on its own: bump it only when native/ changes (PyPI rejects re-uploads,
+# and the publish step uses skip-existing). Show the pair so a stale bump is visible.
+NATIVE=$(sed -n 's/^version = "\(.*\)"/\1/p' "$ROOT/native/Cargo.toml" | head -1)
+echo "skills synced, manifests at $VER (native core $NATIVE)"
