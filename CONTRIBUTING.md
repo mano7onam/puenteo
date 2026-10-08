@@ -42,4 +42,6 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 # optional Rust core:  cd native && maturin develop --release
 ```
 
+Releases: bump `puenteo/version.py` + `pyproject.toml` and run `scripts/sync_skills.sh`. Bump `native/Cargo.toml` and `native/pyproject.toml` **only** when `native/` changes. The core and the accelerator are versioned independently, and `puenteo[fast]` requires a compatible minimum.
+
 Conventions: match the surrounding code, don't add dependencies, run `scripts/sync_skills.sh` after editing a SKILL.md, and keep commit subjects in the `area: what changed` form.
