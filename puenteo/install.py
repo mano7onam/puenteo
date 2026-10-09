@@ -22,7 +22,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-SKILLS = ("puenteo", "puenteo-bus")
+SKILLS = (
+    "puenteo", "puenteo-bus", "puenteo-setup", "puenteo-handoff", "puenteo-mesh", "puenteo-team",
+    "puenteo-dashboard", "puenteo-export", "puenteo-automation", "puenteo-plugin-dev", "puenteo-troubleshoot",
+)
 HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "Stop")
 MCP_NAME = "puenteo"
 

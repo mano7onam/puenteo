@@ -1,13 +1,12 @@
 ---
 name: puenteo
 description: >-
-  Read what other local coding-agent sessions did: search, outline, pull, or export
-  transcripts from Claude Code, Codex, Gemini/Antigravity, Cursor, Grok, Pi, Qwen,
-  Continue, Aider, OpenHands, Goose via the `puenteo` CLI. Use when the user mentions
-  another/previous agent chat or session, "what did codex/claude do", a handoff,
-  "we already did/discussed this", "find where we talked about X", or asks to continue
-  work started elsewhere. For messaging sessions that are running right now, use the
-  puenteo-bus skill.
+  Search and read the HISTORY of past coding-agent sessions on this machine (Claude Code, Codex,
+  Gemini/Antigravity, Cursor, Copilot, OpenCode, Grok, Pi, Qwen, …): "find where we discussed X",
+  "what did codex do yesterday", "we already solved this somewhere", look up an old chat. Use when
+  the user wants to search or read past agent conversations. Not for: continuing another session's
+  task (puenteo-handoff), messaging live sessions (puenteo-bus), other machines (puenteo-mesh),
+  exporting to files (puenteo-export), setup (puenteo-setup), errors (puenteo-troubleshoot).
 ---
 
 # puenteo — history of every agent session on this machine
@@ -39,6 +38,21 @@ Add `--json` to any command for machine-readable output.
 3. Prefer sessions whose `cwd` matches the user's project.
 4. Don't paste secrets from packs into commits, PRs or public logs.
 5. If the other session is still running and you need an answer from it, message it (puenteo-bus skill) instead of inferring.
+
+## Related skills
+
+| Need | Skill |
+|---|---|
+| Install, configure, verify | puenteo-setup |
+| Message sessions running now on this machine | puenteo-bus |
+| Take over another session's task | puenteo-handoff |
+| Several agents in one repo (claims, split work) | puenteo-team |
+| Sessions on other machines, bazaar, rooms | puenteo-mesh |
+| Dashboard, REST/SSE, MCP over HTTP, A2A | puenteo-dashboard |
+| Export or share transcripts (md/html/pdf/…) | puenteo-export |
+| Bots, notifiers, scripts, Python orchestration | puenteo-automation |
+| Support a new agent or tool (plugins) | puenteo-plugin-dev |
+| Something doesn't work | puenteo-troubleshoot |
 
 ## Python
 

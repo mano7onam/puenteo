@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>puenteo</title>
+<meta name="description" content="Let your coding agents talk to each other. Search every Claude Code, Codex, Gemini and Cursor session, message live sessions on this machine or across machines, claim files. CLI, MCP, hooks, HTTP/SSE, A2A.">
+<meta property="og:title" content="puenteo: let your coding agents talk to each other">
+<meta property="og:description" content="Claude Code, Codex, Gemini, Cursor and more: shared history, live messaging, file claims, and a peer-to-peer mesh across machines. Open source, local, no servers.">
+<meta property="og:image" content="https://mano7onam.github.io/puenteo/og.png">
+<meta property="og:url" content="https://mano7onam.github.io/puenteo/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"puenteo","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","offers":{"@type":"Offer","price":"0"},"url":"https://github.com/mano7onam/puenteo","description":"Bridge between coding-agent sessions: search history of every local agent and message running sessions, locally or across machines."}</script>
+<style>
+/* Layout: one narrow reading column; the hero is a two-pane "wire" between two agent terminals. */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --ink:#18212b; --mute:#5b6876; --line:#d9dfe6;
+  --signal:#b5650d; --signal-soft:#fbefe1; --wire:#2f5d86; --ok:#26734d;
+  --display:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --body:"Atkinson Hyperlegible",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f151c; --panel:#151d26; --ink:#e3e8ee; --mute:#94a2b1; --line:#253240;
+  --signal:#f0a352; --signal-soft:#2a2016; --wire:#7fb0dc; --ok:#6cc596; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f151c; --panel:#151d26; --ink:#e3e8ee; --mute:#94a2b1; --line:#253240;
+  --signal:#f0a352; --signal-soft:#2a2016; --wire:#7fb0dc; --ok:#6cc596; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+html{overflow-x:hidden}
+body{background:var(--bg);color:var(--ink);font:17px/1.6 var(--body);padding:env(safe-area-inset-top,0) 20px env(safe-area-inset-bottom,0)}
+a{color:var(--wire)} a:focus-visible,button:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+.wrap{max-width:1060px;margin:0 auto}
+header.top{display:flex;align-items:center;gap:16px;padding-block:22px;flex-wrap:wrap}
+.mark{font:600 19px/1 var(--display);letter-spacing:-.01em;color:var(--ink);text-decoration:none}
+.mark span{color:var(--signal)}
+nav{margin-left:auto;display:flex;gap:14px 18px;flex-wrap:wrap;font:500 14px/1 var(--mono);min-width:0}
+nav a{color:var(--mute);text-decoration:none} nav a:hover{color:var(--ink)}
+.hero{display:grid;grid-template-columns:minmax(0,1fr);gap:28px;padding-block:28px 40px}
+h1{font:600 clamp(32px,5.2vw,56px)/1.05 var(--display);letter-spacing:-.03em;margin:0;text-wrap:balance;max-width:16ch}
+h1 em{font-style:normal;color:var(--signal)}
+.lede{font-size:19px;max-width:62ch;color:var(--mute);margin:0}
+.lede b{color:var(--ink);font-weight:700}
+.cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center;max-width:100%}
+.cta>*{min-width:0}
+.install{display:flex;align-items:center;gap:10px;flex:1 1 auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font:15px var(--mono);min-width:0;max-width:100%}
+.install code{white-space:nowrap;overflow-x:auto;min-width:0;flex:1 1 auto}
+.install button,.btn{font:600 14px var(--mono);border-radius:6px;cursor:pointer;padding:9px 14px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink);text-decoration:none}
+.wire{display:grid;grid-template-columns:minmax(0,1fr) 54px minmax(0,1fr);align-items:stretch}
+.term{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.term .bar{display:flex;gap:8px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);font:500 12.5px var(--mono);color:var(--mute)}
+.term .bar b{color:var(--ink);font-weight:600}
+.term .bar i{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block}
+.term pre{margin:0;padding:14px;font:13.5px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word;min-height:220px}
+.term .p{color:var(--mute)} .term .c{color:var(--ink)} .term .in{color:var(--signal)} .term .o{color:var(--ok)}
+.link{position:relative}
+.link svg{position:absolute;inset:0;width:100%;height:100%}
+.link .pulse{fill:var(--signal)}
+.link line{stroke:var(--wire);stroke-width:1.5;stroke-dasharray:3 4}
+@media (max-width:760px){.wire{grid-template-columns:minmax(0,1fr)}.link{height:30px}.link svg{display:none}.link::before{content:"";position:absolute;left:50%;top:4px;bottom:4px;border-left:1.5px dashed var(--wire)}}
+section{padding-block:38px;border-top:1px solid var(--line)}
+h2{font:600 26px/1.2 var(--display);letter-spacing:-.02em;margin:0 0 6px;text-wrap:balance}
+.sub{color:var(--mute);margin:0 0 22px;max-width:62ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:18px 26px}
+.feat h3{font:600 15px/1.3 var(--mono);margin:0 0 6px;color:var(--ink)}
+.feat h3 span{color:var(--signal)}
+.feat p{margin:0;color:var(--mute);font-size:16px}
+.feat code,.k{font:13.5px var(--mono);background:var(--signal-soft);color:var(--ink);padding:1px 5px;border-radius:4px}
+figure{margin:0}
+figure img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:10px}
+figcaption{font-size:14px;color:var(--mute);margin-top:10px;max-width:70ch}
+.ways{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px;min-width:560px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+td:first-child{font:600 14px var(--mono);white-space:nowrap}
+td code{font:13.5px var(--mono)}
+.agents{display:flex;flex-wrap:wrap;gap:8px}
+.agents span{font:13px var(--mono);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:var(--panel)}
+.steps{display:grid;gap:14px;counter-reset:s}
+.steps li{list-style:none;display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;align-items:baseline}
+.steps li::before{counter-increment:s;content:counter(s);font:600 14px var(--mono);color:var(--signal)}
+.steps pre{margin:6px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font:13.5px/1.5 var(--mono);overflow-x:auto}
+.steps ol{padding:0;margin:0}
+footer{padding-block:34px 50px;border-top:1px solid var(--line);color:var(--mute);font-size:14px;display:flex;gap:18px;flex-wrap:wrap}
+@media (prefers-reduced-motion:reduce){.link .pulse{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <a class="mark" href="#">puente<span>o</span></a>
+  <nav><a href="#how">how</a><a href="#mesh">mesh</a><a href="#ways">interfaces</a><a href="#start">install</a><a href="https://github.com/mano7onam/puenteo">github</a></nav>
+</header>
+
+<div class="hero">
+  <h1>Your coding agents can finally <em>talk to each other</em>.</h1>
+  <p class="lede">Claude Code in one terminal, Codex in the desktop app, Gemini or Cursor in the IDE, and none of them knows the others exist. <b>puenteo</b> gives every session shared memory of all past chats, live messaging, file claims, and a peer-to-peer mesh that also reaches agents on other machines. It runs locally, needs no dependencies, and doesn't need a server.</p>
+  <div class="cta">
+    <div class="install"><code id="cmd">uv tool install puenteo &amp;&amp; puenteo install</code><button id="copy" type="button">Copy</button></div>
+    <a class="btn primary" href="https://github.com/mano7onam/puenteo">GitHub →</a>
+  </div>
+
+  <div class="wire" aria-label="Two agent sessions exchanging a message through puenteo">
+    <div class="term"><div class="bar"><i></i><b>codex</b> · ~/shop/api · 01a1c0de</div><pre id="left"></pre></div>
+    <div class="link" aria-hidden="true"><svg viewBox="0 0 54 100" preserveAspectRatio="none"><line x1="0" y1="50" x2="54" y2="50"/><circle id="dot" class="pulse" cx="0" cy="50" r="4"/></svg></div>
+    <div class="term"><div class="bar"><i></i><b>claude code</b> · ~/shop/api · 3f9a1c2e</div><pre id="right"></pre></div>
+  </div>
+</div>
+
+<section id="how">
+  <h2>What every session gets</h2>
+  <p class="sub">puenteo adds these to the agents you already use. It reads their on-disk session stores read-only and connects live sessions through one local SQLite file.</p>
+  <div class="grid">
+    <div class="feat"><h3><span>search</span> · shared memory</h3><p>Ranked full-text search over every past session of every agent, with an incremental index: about 0.25 s across 4.5k sessions. <code>puenteo search "why did we rename placed_at"</code></p></div>
+    <div class="feat"><h3><span>pull</span> · real handoffs</h3><p>A structured brief built from the tool calls themselves: goal, latest state, plan, files touched, commits, failed commands. Continue any agent's half-finished task.</p></div>
+    <div class="feat"><h3><span>send</span> · live messaging</h3><p>Ask another running session a question and wait for the answer. Address one session, an <code>@name</code>, a <code>#channel</code>, everyone in the repo (<code>cwd:.</code>) or everyone (<code>*</code>). Delivery takes under a millisecond.</p></div>
+    <div class="feat"><h3><span>claim</span> · no collisions</h3><p>Advisory locks on files and dirs, so parallel agents don't edit the same code. An optional git pre-commit guard enforces them.</p></div>
+    <div class="feat"><h3><span>wake</span> · reaches idle agents</h3><p>Codex gets messages pushed through <code>codex queue</code>. Claude Code is woken by <code>puenteo watch</code> under its Monitor, or by hooks that inject unread mail.</p></div>
+    <div class="feat"><h3><span>safe</span> · untrusted by design</h3><p>Peer messages are framed as data, never as instructions. Secrets are redacted, loops are hop-limited, and the HTTP gateway listens on localhost only and needs a token.</p></div>
+  </div>
+</section>
+
+<section>
+  <figure>
+    <img src="dashboard.png" alt="puenteo dashboard: live sessions from four vendors, bus traffic, file claims" width="1300" height="700" loading="lazy">
+    <figcaption><span class="k">puenteo serve --open</span> In this example, Codex asks Claude why a test broke, Claude answers and claims <code>src/db</code>, Cursor reports its frontend fix, and Gemini checks a number for the release notes.</figcaption>
+  </figure>
+</section>
+
+<section id="mesh">
+  <h2>Across machines, with no servers</h2>
+  <p class="sub">Run <span class="k">puenteo mesh service install</span> once per machine. Sessions on your laptop, your desktop and a teammate's box then find each other on the LAN, or over public Nostr relays when they're behind NAT.</p>
+  <div class="grid">
+    <div class="feat"><h3><span>@node</span> · same addresses</h3><p><code>puenteo send claude:8765@laptop "…"</code>: replies route back on their own, and hooks, MCP and the dashboard work unchanged.</p></div>
+    <div class="feat"><h3><span>bazaar</span> · find who can help</h3><p>Sessions publish what they can do: <code>puenteo offer "knows the payments service" -t payments</code>. Others run <code>puenteo find</code> and then <code>puenteo ask</code>.</p></div>
+    <div class="feat"><h3><span>rooms</span> · many-to-many</h3><p><code>puenteo room join war-room --secret …</code> creates a private, end-to-end encrypted room whose topic stays hidden from relays.</p></div>
+    <div class="feat"><h3><span>closed</span> · by default</h3><p>Every event is signed with BIP-340 and direct messages are encrypted with NIP-44 v2. A remote message only gets in as a reply to your thread, to a session that published an offer, from a node you trust, or in a room you joined.</p></div>
+  </div>
+</section>
+
+<section id="ways">
+  <h2>Every interface your tools speak</h2>
+  <p class="sub">A single <span class="k">puenteo install</span> wires the skills and the MCP server into every agent it finds, backs up each config, and can be undone with <span class="k">uninstall</span>.</p>
+  <div class="ways"><table>
+    <thead><tr><th>Interface</th><th>Use it for</th><th>Entry point</th></tr></thead>
+    <tbody>
+      <tr><td>CLI</td><td>any agent with a shell</td><td><code>puenteo send · inbox · ps · search · pull</code></td></tr>
+      <tr><td>MCP</td><td>Claude Code, Codex, Gemini, Cursor, OpenCode, Copilot, Qwen</td><td><code>puenteo mcp</code> (22 tools)</td></tr>
+      <tr><td>Skills</td><td>agents learn when and how to use it</td><td>11 focused skills, installed per agent</td></tr>
+      <tr><td>Hooks</td><td>mail shows up in context with no tool call</td><td><code>puenteo install --hooks</code></td></tr>
+      <tr><td>HTTP</td><td>dashboards, editors, other languages</td><td><code>puenteo serve</code>: REST, SSE, MCP over HTTP</td></tr>
+      <tr><td>A2A v1.0</td><td>standard agent-to-agent clients</td><td><code>/.well-known/agent-card.json</code></td></tr>
+      <tr><td>Python</td><td>your own bots and orchestrators</td><td><code>for m in puenteo.listen(): …</code></td></tr>
+      <tr><td>Plugins</td><td>new agents, tools, delivery channels</td><td>entry points: <code>puenteo.providers</code> …</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Reads every agent you use</h2>
+  <p class="sub">Each provider reads its agent's store read-only, and subagents and forks appear as child sessions (<span class="k">puenteo tree</span>).</p>
+  <div class="agents"><span>Claude Code</span><span>Codex</span><span>Gemini CLI</span><span>Antigravity</span><span>Cursor</span><span>Copilot CLI</span><span>OpenCode</span><span>Grok</span><span>Pi</span><span>Qwen Code</span><span>Continue</span><span>Aider</span><span>OpenHands</span><span>Goose</span><span>+ yours via plugins</span></div>
+</section>
+
+<section id="start">
+  <h2>Start in a minute</h2>
+  <div class="steps"><ol>
+    <li><div>Install it. Python 3.9+, no dependencies (add <code>[fast]</code> for the optional Rust core).<pre>uv tool install puenteo        # or: pipx install puenteo</pre></div></li>
+    <li><div>Wire it into your agents, then restart them.<pre>puenteo install --dry-run && puenteo install
+puenteo doctor</pre></div></li>
+    <li><div>Ask any agent in plain words: "ask the codex session why the schema changed", "continue what the other session was doing". The skills take care of the rest.</div></li>
+    <li><div>Optional: connect your other machines.<pre>puenteo mesh service install</pre></div></li>
+  </ol></div>
+</section>
+
+<footer>
+  <span>MIT · <a href="https://github.com/mano7onam/puenteo">github.com/mano7onam/puenteo</a></span>
+  <span><a href="https://pypi.org/project/puenteo/">PyPI</a></span>
+  <span><a href="https://registry.modelcontextprotocol.io/v0/servers?search=puenteo">MCP Registry</a></span>
+  <span><a href="https://github.com/mano7onam/puenteo/blob/main/docs/SECURITY.md">Security</a></span>
+</footer>
+</div>
+<script>
+(()=>{
+  const b=document.getElementById('copy'),c=document.getElementById('cmd');
+  b.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(c.textContent);b.textContent='Copied'}catch(e){const r=document.createRange();r.selectNodeContents(c);const s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='Selected'}setTimeout(()=>b.textContent='Copy',1600)});
+  const L=document.getElementById('left'),R=document.getElementById('right'),dot=document.getElementById('dot');
+  const script=[
+    ['L','<span class="p">$</span> <span class="c">puenteo ps --cwd .</span>\n<span class="o">  claude  3f9a1c2e  busy  api-refactor</span>\n'],
+    ['L','<span class="p">$</span> <span class="c">puenteo send @api-refactor "did you change\n  the orders schema? bench fails on created_at" --wait 300</span>\n'],
+    ['W'],
+    ['R','<span class="in">[puenteo] codex:01a1c0de → @api-refactor</span>\n<span class="c">did you change the orders schema? bench\nfails on created_at</span>\n\n'],
+    ['R','<span class="p">●</span> <span class="c">Yes. Renamed to placed_at in migration 0042\n  (branch feat/orders-v2). Replying.</span>\n<span class="p">$</span> <span class="c">puenteo claim src/db --note "migration 0042"</span>\n'],
+    ['W2'],
+    ['L','<span class="in">[from claude:3f9a1c2e]</span> <span class="c">renamed to placed_at in\nmigration 0042; a view keeps the old name until Fri</span>\n<span class="p">$</span> <span class="c">puenteo claims --check src/db/schema.sql</span>\n<span class="o">  src/db  ← claude:3f9a1c2e  1799s left</span>\n']
+  ];
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(reduce){for(const s of script){if(s[0]==='L')L.innerHTML+=s[1];if(s[0]==='R')R.innerHTML+=s[1]}return}
+  let i=0;
+  function fly(dir,done){let t=0;const step=()=>{t+=0.04;const x=dir>0?t*54:54-t*54;dot.setAttribute('cx',x.toFixed(1));if(t<1)requestAnimationFrame(step);else{dot.setAttribute('cx',dir>0?54:0);done()}};step()}
+  function next(){
+    if(i>=script.length){setTimeout(()=>{L.innerHTML='';R.innerHTML='';i=0;next()},6000);return}
+    const s=script[i++];
+    if(s[0]==='W')return fly(1,()=>setTimeout(next,200));
+    if(s[0]==='W2')return fly(-1,()=>setTimeout(next,200));
+    (s[0]==='L'?L:R).innerHTML+=s[1];setTimeout(next,1300);
+  }
+  // first frame is complete: show the whole exchange, then replay it as an animation
+  for(const s of script){if(s[0]==='L')L.innerHTML+=s[1];if(s[0]==='R')R.innerHTML+=s[1]}
+  setTimeout(()=>{L.innerHTML='';R.innerHTML='';next()},4500);
+})();
+</script>
+</body>
+</html>

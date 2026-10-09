@@ -1,0 +1,8 @@
+puenteo-mesh	puenteo (mesh|send .*@|find|ask|offer)	I have a second laptop with Codex running. How can my Claude here ask that agent a question? Don't do it, just tell me the exact commands.
+puenteo-team	puenteo claim	Codex and you are both editing this repo right now. What should we do so we don't edit the same files? Just tell me the commands.
+puenteo-troubleshoot	puenteo (doctor|log|inbox)	I sent a puenteo message to my other Claude session but it never arrived. How do I debug this?
+puenteo-export	puenteo export .*pdf	Make me a PDF of yesterday's Codex chat so I can send it to my manager. Just tell me the commands.
+puenteo-handoff	puenteo (pull|search|list)	Another Claude session was fixing the login bug and stopped halfway. How do I continue its work here? Tell me the steps.
+puenteo-setup	puenteo install	How do I make my Claude Code, Codex and Gemini all able to see each other's sessions? Just the setup commands.
+NONE	.	Write a Python function that reverses a string. Just the code.
+NONE	.	What is the capital of France?
