@@ -20,7 +20,7 @@ The mesh extends the local bus so that sessions on different machines can find e
 
 1. **LAN**: UDP multicast beacons on `239.255.77.57:47357` plus direct HTTP POST to the peer's `puenteo serve` mesh endpoint. Zero config inside one network.
 2. **Nostr relays**: public relays are the default, or your own. Through relays, nodes behind NAT can find each other and exchange messages without port forwarding. Direct messages are end-to-end encrypted, so relays only see opaque events.
-3. **Direct peers**: `puenteo mesh peer add http://host:7357` for a Tailscale, VPN or LAN address.
+3. **Direct peers**: `puenteo mesh peer http://host:7358 --pubkey <npub> --name <node>` for a Tailscale, VPN or LAN address (port 7358 is the direct endpoint of `mesh up`).
 4. **Own relay**: `puenteo mesh relay` is a tiny Nostr relay built into puenteo (WebSocket, in memory plus SQLite) for teams that don't want public relays.
 
 ## Running it

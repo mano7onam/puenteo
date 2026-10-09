@@ -1,0 +1,28 @@
+name: pages
+
+# Publishes site/ (landing page, llms.txt, preview image) to GitHub Pages.
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "llms.txt", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write   # required by actions/deploy-pages (scoped to this workflow only)
+
+concurrency: { group: pages, cancel-in-progress: true }
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
+    steps:
+      - uses: actions/checkout@v5
+      - run: cp llms.txt site/llms.txt
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with: { path: site }
+      - id: d
+        uses: actions/deploy-pages@v4

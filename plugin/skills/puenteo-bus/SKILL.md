@@ -1,12 +1,11 @@
 ---
 name: puenteo-bus
 description: >-
-  Talk to other agent sessions that are running right now on this machine — any vendor
-  (Claude Code, Codex, Gemini, Cursor, Grok, …): see who is working (`puenteo ps`), send
-  messages, ask questions and wait for replies, post to shared channels, and claim files
-  so parallel agents don't edit the same code. Use when the user says "ask the other
-  session/agent", "tell codex/claude …", "coordinate with", "message the session in …",
-  "check with the other window", or when several agents work in one repo.
+  Message coding-agent sessions running RIGHT NOW on THIS machine: see who is running (ps), ask
+  another window a question and wait for the answer, tell codex/claude something, post to a channel.
+  Use when the user says "ask the other session/window", "tell codex …", "message the claude in
+  ~/proj". Not for: avoiding edit conflicts between agents in one repo (puenteo-team), agents on
+  another computer (puenteo-mesh), or a message that did not arrive (puenteo-troubleshoot).
 ---
 
 # puenteo-bus — live messaging between agent sessions

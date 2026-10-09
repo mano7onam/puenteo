@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0 — 2026-10-09
+
+- **11 skills** instead of 2, each with sharp routing. The `puenteo` hub skill points to the right one:
+  - puenteo-setup, puenteo-bus, puenteo-handoff, puenteo-team, puenteo-mesh
+  - puenteo-dashboard, puenteo-export, puenteo-automation, puenteo-plugin-dev, puenteo-troubleshoot
+- `puenteo install` ships all of them to every agent (Claude Code, Codex/Gemini/Cursor/OpenCode/Copilot via `~/.agents/skills`, Qwen, Grok), and so do the Claude plugin and the Gemini extension.
+- `tests/test_skills.py`: every `puenteo …` command shown in any skill must parse with the real CLI, and every skill must have valid frontmatter with a "Use when". This caught a wrong `mesh peer add` in the docs.
+- `evals/run_skill_eval.sh` checks that real Claude Code sessions load the right skill and answer with correct commands. Before the routing rewrite: 0/5. After: 5/6 correct commands, 4/6 exact skill, 4/4 no false triggers.
+
 ## 0.12.0 — 2026-10-08
 
 - `puenteo mesh service install|uninstall|status`: the bridge runs in the background at login (launchd, systemd --user, Task Scheduler), restarts on crash and stops cleanly on SIGTERM.
@@ -12,7 +21,7 @@
 ## 0.11.0 — 2026-10-07
 
 **Mesh: sessions across machines, P2P, no servers.**
-- `puenteo mesh up`: a bridge between the local bus and other machines. Transports: LAN (UDP multicast discovery + direct HTTP), public Nostr relays (NAT-friendly), a self-hosted relay (`puenteo mesh relay`), or direct VPN peers (`mesh peer add`).
+- `puenteo mesh up`: a bridge between the local bus and other machines. Transports: LAN (UDP multicast discovery + direct HTTP), public Nostr relays (NAT-friendly), a self-hosted relay (`puenteo mesh relay`), or direct VPN peers (`mesh peer`).
 - Addressing: any local address plus `@node` (`claude:8765@laptop`, `@reviewer@box`, `#room@*`). Remote messages land in the local bus, so hooks, `codex queue`, Monitor, MCP and the dashboard work with them unchanged. Replies route back automatically.
 - Bazaar: `offer`, `find` (ranked across machines), `ask`. Rooms: `room join|leave|list|say`, many-to-many, with private rooms encrypted by a shared secret (the topic is hidden too).
 - Security: BIP-340 Schnorr-signed events, NIP-44 v2 end-to-end encryption for DMs, a default-closed inbound policy (reply-to-own-thread / offer / trusted node / joined room), per-node rate limit, a cross-machine hop limit, block/trust, and stale-key handling when a machine is reinstalled.

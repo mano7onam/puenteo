@@ -19,6 +19,7 @@ When you run Claude Code in one terminal, Codex in another and Gemini or Cursor 
 
 No runtime dependencies · Python ≥ 3.9 · macOS · Linux · Windows · optional Rust core
 
+[![Website](https://img.shields.io/badge/site-mano7onam.github.io%2Fpuenteo-b5650d)](https://mano7onam.github.io/puenteo/)
 [![PyPI](https://img.shields.io/pypi/v/puenteo.svg)](https://pypi.org/project/puenteo/)
 [![CI](https://github.com/mano7onam/puenteo/actions/workflows/ci.yml/badge.svg)](https://github.com/mano7onam/puenteo/actions/workflows/ci.yml)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.mano7onam%2Fpuenteo-blue)](https://registry.modelcontextprotocol.io/v0/servers?search=puenteo)
@@ -203,6 +204,26 @@ Live detection (`ps`) covers Claude Code (`~/.claude/sessions`), Codex (thread l
 | Search index + metadata cache | `~/Library/Caches/puenteo` · `~/.cache/puenteo` · `%LOCALAPPDATA%\puenteo\Cache` | `PUENTEO_HOME`, `PUENTEO_NO_INDEX=1`, `PUENTEO_NO_CACHE=1` |
 | Message bus | `~/Library/Application Support/puenteo/bus.db` · `~/.local/state/puenteo` · `%LOCALAPPDATA%\puenteo\State` | `PUENTEO_BUS` |
 | Identity | detected automatically | `PUENTEO_SESSION=agent:id`, `--as` |
+
+## Skills (what your agents learn)
+
+`puenteo install` gives every agent 11 focused skills. Agents pick the right one from a plain request, so you don't have to remember commands:
+
+| You say… | Skill |
+|---|---|
+| "set up puenteo", "connect my agents" | puenteo-setup |
+| "where did we discuss X", "what did codex do yesterday" | puenteo |
+| "ask the other window", "tell codex …" | puenteo-bus |
+| "continue where the other session stopped" | puenteo-handoff |
+| "we're both editing this repo" | puenteo-team |
+| "ask the agent on my other laptop" | puenteo-mesh |
+| "open the dashboard", REST/SSE/A2A | puenteo-dashboard |
+| "make a PDF of that chat" | puenteo-export |
+| "a bot that answers agents", Python API | puenteo-automation |
+| "support agent X", plugins | puenteo-plugin-dev |
+| "puenteo doesn't work" | puenteo-troubleshoot |
+
+Every command shown in a skill is checked against the real CLI in CI (`tests/test_skills.py`). `evals/run_skill_eval.sh` checks with real Claude Code sessions that the right skill loads.
 
 ## Extend it
 

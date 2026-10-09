@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "puenteo"
-version = "0.12.0"
+version = "0.13.0"
 description = "Let your coding agents talk to each other: search every Claude Code / Codex / Gemini / Cursor session, message live sessions, claim files — CLI, MCP, hooks, HTTP/SSE, A2A."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -62,7 +62,8 @@ dev = ["pytest>=7", "build", "twine"]
 fast = ["puenteo-core>=0.9.1"]
 
 [project.urls]
-Homepage = "https://github.com/mano7onam/puenteo"
+Homepage = "https://mano7onam.github.io/puenteo/"
+Source = "https://github.com/mano7onam/puenteo"
 Repository = "https://github.com/mano7onam/puenteo"
 Issues = "https://github.com/mano7onam/puenteo/issues"
 Changelog = "https://github.com/mano7onam/puenteo/releases"
