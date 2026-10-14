@@ -110,18 +110,28 @@ def _thread_names() -> dict:
     if not dbs:
         return {}
     db = dbs[-1]
-    try:
-        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2)
-    except Exception:
+    con = None
+    cols: set = set()
+    # Plain mode=ro fails ("unable to open database file") on some Codex
+    # versions; immutable=1 is still strictly read-only, just without locking.
+    for uri in (f"file:{db}?mode=ro", f"file:{db}?mode=ro&immutable=1"):
+        try:
+            con = sqlite3.connect(uri, uri=True, timeout=2)
+            cols = {r[1] for r in con.execute("PRAGMA table_info(threads)")}
+            break
+        except Exception:
+            if con is not None:
+                con.close()
+            con = None
+    if con is None:
         return {}
     out = {}
     try:
-        cols = {r[1] for r in con.execute("PRAGMA table_info(threads)")}
         want = [
             c
             for c in (
                 "id", "title", "name", "first_user_message", "agent_nickname",
-                "agent_path", "git_branch", "model", "cwd", "source",
+                "agent_path", "git_branch", "model", "cwd", "source", "updated_at_ms", "updated_at", "archived",
             )
             if c in cols
         ]

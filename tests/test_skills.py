@@ -37,7 +37,7 @@ def _commands(text: str):
     lines += re.findall(r"`(puenteo [^`]+)`", text)  # inline commands in prose and tables
     if True:
         for line in lines:
-            line = line.split(" #")[0].strip()
+            line = line.split(" #")[0].split(" <<")[0].strip()  # drop comments and heredoc redirection
             for part in re.split(r"\s*(?:\|\||&&|\|)\s*", line):
                 part = part.strip()
                 if part.startswith("puenteo ") and "<" not in part.split(" ", 2)[1]:

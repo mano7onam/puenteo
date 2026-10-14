@@ -138,13 +138,13 @@ class Gateway:
                 msgs = b.inbox(as_addr, unread_only=q.get("all") != "1", mark_read=q.get("peek") != "1")
                 return 200, [m.to_dict() for m in msgs]
         if path == "/api/send" and method == "POST":
-            from .deliver import push_pending
+            from .deliver import push_bounded
 
             with Bus() as b:
                 m = b.send(as_addr, body.get("to", ""), body.get("text", ""), thread=body.get("thread", ""),
                            reply_to=body.get("reply_to", ""))
                 d = m.to_dict()
-                d["delivery"] = push_pending(b, m)
+                d["delivery"] = push_bounded(m, bus_path=b.path)
                 return 200, d
         if path == "/api/claim" and method == "POST":
             with Bus() as b:

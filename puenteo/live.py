@@ -197,7 +197,7 @@ def _claude_sessions(check_start: bool = True) -> List[LiveSession]:
                 started_at=float(data.get("startedAt") or 0) / 1000.0,
                 updated_at=upd,
                 source=str(f),
-                delivery=["bus", "hook"],
+                delivery=["bus", "hook"] if hooks_installed("claude", str(data.get("cwd") or "")) else ["bus"],
                 meta={k: data.get(k) for k in ("kind", "entrypoint", "version") if data.get(k)},
             )
         )
@@ -259,11 +259,9 @@ def _lsof_holders(paths: List[str], *, among: Optional[List[int]] = None) -> Dic
 
 def _codex_sessions() -> List[LiveSession]:
     d = _home() / ".codex" / "thread-writer-locks"
-    if not d.is_dir():
-        return []
-    locks = [str(p) for p in d.glob("*.lock")]
+    locks = [str(p) for p in d.glob("*.lock")] if d.is_dir() else []
     if not locks:
-        return []
+        return _codex_recent_threads()
     pids = _pids_matching("codex") if sys.platform != "win32" else []
     holders = _lsof_holders(locks, among=pids or None)
     if not holders and locks and sys.platform != "win32":
@@ -297,11 +295,91 @@ def _codex_sessions() -> List[LiveSession]:
                 started_at=mt,
                 updated_at=mt,
                 source=lock,
-                delivery=["bus", "codex-queue", "hook"],
+                delivery=["bus", "codex-queue"] + (["hook"] if hooks_installed("codex", str(row.get("cwd") or "")) else []),
                 meta={k: v for k, v in (("parent_id", row.get("parent_id")), ("nickname", row.get("agent_nickname"))) if v},
             )
         )
     return out
+
+
+CODEX_RECENT_S = 20 * 60
+
+
+def _codex_recent_threads(window_s: float = CODEX_RECENT_S) -> List[LiveSession]:
+    """
+    Newer Codex app-servers keep no per-thread lock files. Fall back to Codex's
+    own thread index: threads updated in the last ``window_s`` while a Codex
+    process is running. Marked ``status="recent"`` because this is activity,
+    not proof that the thread is loaded right now.
+    """
+    pids = _pids_matching("codex") if sys.platform != "win32" else []
+    if sys.platform != "win32" and not pids:
+        return []
+    try:
+        from .providers.codex import _thread_names
+    except Exception:
+        return []
+    cutoff = time.time() - window_s
+    out = []
+    for tid, row in _thread_names().items():
+        upd = float(row.get("updated_at_ms") or 0) / 1000.0 or float(row.get("updated_at") or 0)
+        if upd < cutoff or row.get("archived"):
+            continue
+        out.append(
+            LiveSession(
+                agent="codex",
+                session_id=tid,
+                pid=None,
+                cwd=str(row.get("cwd") or ""),
+                name=str(row.get("name") or row.get("title") or row.get("agent_nickname") or "")[:80],
+                status="recent",
+                started_at=upd,
+                updated_at=upd,
+                source="codex-state",
+                delivery=["bus", "codex-queue"] + (["hook"] if hooks_installed("codex", str(row.get("cwd") or "")) else []),
+                meta={k: v for k, v in (("parent_id", row.get("parent_id")), ("nickname", row.get("agent_nickname"))) if v},
+            )
+        )
+    return out
+
+
+_hooks_cache: Dict[Any, Any] = {}
+
+
+def hooks_installed(agent: str, cwd: str = "") -> bool:
+    """
+    Is a ``puenteo hook`` registered for this agent (user or project settings,
+    or the enabled Claude plugin)? Without one a message reaches an idle
+    session only when it calls ``inbox`` itself.
+    """
+    key = (agent, cwd)
+    hit = _hooks_cache.get(key)
+    if hit and time.time() - hit[0] < 30:
+        return hit[1]
+    h = _home()
+    if agent in ("claude", "claude_code"):
+        files = [h / ".claude" / "settings.json", h / ".claude" / "settings.local.json"]
+        if cwd:
+            files += [Path(cwd) / ".claude" / "settings.json", Path(cwd) / ".claude" / "settings.local.json"]
+    elif agent == "codex":
+        files = [h / ".codex" / "hooks.json"] + ([Path(cwd) / ".codex" / "hooks.json"] if cwd else [])
+    else:
+        files = []
+    found = False
+    for f in files:
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if "puenteo" in json.dumps(data.get("hooks") or {}) and " hook " in json.dumps(data.get("hooks") or {}):
+            found = True
+            break
+        plugins = data.get("enabledPlugins") or {}
+        if isinstance(plugins, dict) and any(k.split("@")[0] == "puenteo" and v for k, v in plugins.items()):
+            found = True
+            break
+    _hooks_cache[key] = (time.time(), found)
+    return found
 
 
 def _grok_sessions() -> List[LiveSession]:
@@ -477,6 +555,14 @@ def _native_cached() -> List[LiveSession]:
     return rows
 
 
+PROVISIONAL_TTL_S = 10 * 60
+
+
+def _is_provisional(session_id: str) -> bool:
+    """``pid1234``: the address an MCP server uses until it knows its session."""
+    return session_id.startswith("pid") and session_id[3:].isdigit()
+
+
 def live_sessions(
     *,
     agents: Optional[List[str]] = None,
@@ -505,9 +591,12 @@ def live_sessions(
             continue
         found.setdefault(s.address, copy.deepcopy(s))
     if include_bus:
+        now = time.time()
         for p in _bus_peers():
             if want and normalize_provider_name(p.agent) not in want:
                 continue
+            if _is_provisional(p.session_id) and now - (p.updated_at or 0) > PROVISIONAL_TTL_S:
+                continue  # an MCP server that never learned its session: a ghost after a few minutes
             cur = found.get(p.address)
             if cur:
                 # native detector knows pid/status; bus knows name + that it reads the inbox
@@ -657,6 +746,14 @@ def _whoami(pid: Optional[int]) -> Optional[Me]:
     near = nearest_agent(pid)
     near_agent = near[0] if near else None
 
+    # Claude rewrites ~/.claude/sessions/<pid>.json on resume and /clear, while
+    # CLAUDE_CODE_SESSION_ID keeps the id from when this process was spawned
+    # (an MCP server lives across both). The pid file of our Claude wins.
+    if near_agent == "claude_code":
+        me = _claude_pidfile(near[1], cwd)
+        if me:
+            return me
+
     # Agent env vars are inherited by every child — including *other* agents
     # started from inside a session. Trust one only if that agent is our
     # nearest agent ancestor (or we can't tell).
@@ -676,25 +773,12 @@ def _whoami(pid: Optional[int]) -> Optional[Me]:
             return Me(agent=agent, session_id=val, cwd=cwd, how=var)
 
     # Claude: <pid>.json for any ancestor (MCP servers and hooks are children of claude)
-    d = _home() / ".claude" / "sessions"
     for p in chain:
         if near and near_agent != "claude_code" and p == near[1]:
             break  # reached a non-Claude agent: anything above it belongs to another session
-        f = d / f"{p}.json"
-        if f.is_file():
-            try:
-                data = json.loads(f.read_text(encoding="utf-8"))
-                if data.get("sessionId"):
-                    return Me(
-                        agent="claude_code",
-                        session_id=str(data["sessionId"]),
-                        cwd=str(data.get("cwd") or cwd),
-                        pid=p,
-                        how="claude-pidfile",
-                        name=str(data.get("name") or ""),
-                    )
-            except Exception:
-                pass
+        me = _claude_pidfile(p, cwd)
+        if me:
+            return me
     # Grok: active_sessions.json pid
     for s in _grok_sessions():
         if s.pid in chain:
@@ -706,13 +790,10 @@ def _whoami(pid: Optional[int]) -> Optional[Me]:
             s = codex[0]
             return Me(agent="codex", session_id=s.session_id, cwd=s.cwd or cwd, pid=s.pid, how="codex-lock")
         if len(codex) > 1:
-            # app-server hosts many threads: pick the one in our cwd, most recently touched
-            from .util import cwd_matches
-
-            here = [s for s in codex if cwd_matches(s.cwd, cwd)] or codex
-            here.sort(key=lambda s: s.updated_at, reverse=True)
-            s = here[0]
-            return Me(agent="codex", session_id=s.session_id, cwd=s.cwd or cwd, pid=s.pid, how="codex-lock-guess")
+            # One app-server hosts many threads. Picking "the newest in this cwd"
+            # used to hand us another thread's identity (and its inbox), so we
+            # don't guess: the caller gets a provisional address instead.
+            return None
         if near_agent == "codex":
             # codex exec / fresh thread: newest rollout in this cwd written by our codex process
             s = _newest_codex_rollout_for(near[1], cwd)
@@ -721,6 +802,24 @@ def _whoami(pid: Optional[int]) -> Optional[Me]:
     except Exception:
         pass
     return None
+
+
+def _claude_pidfile(p: int, cwd: str) -> Optional[Me]:
+    f = _home() / ".claude" / "sessions" / f"{p}.json"
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not data.get("sessionId"):
+        return None
+    return Me(
+        agent="claude_code",
+        session_id=str(data["sessionId"]),
+        cwd=str(data.get("cwd") or cwd),
+        pid=p,
+        how="claude-pidfile",
+        name=str(data.get("name") or ""),
+    )
 
 
 def _newest_codex_rollout_for(codex_pid: int, cwd: str) -> Optional[str]:

@@ -233,7 +233,8 @@ fn claude_rows(buf: &[u8], include_tools: bool) -> Vec<Row> {
         };
         let t = v["type"].as_str().unwrap_or("");
         if t == "ai-title" {
-            out.push(("__title__".into(), v["title"].as_str().unwrap_or("").into(), String::new(), String::new()));
+            let t = v["aiTitle"].as_str().or_else(|| v["title"].as_str()).unwrap_or("");
+            out.push(("__title__".into(), t.into(), String::new(), String::new()));
             continue;
         }
         if t != "user" && t != "assistant" {

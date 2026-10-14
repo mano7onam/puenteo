@@ -138,7 +138,7 @@ The Rust core (`native/`, PyO3 abi3 wheels) is optional. Without it, puenteo sta
 `puenteo mcp` is a stdio MCP server with no dependencies, one process per agent session. It detects which session it serves from the parent-process chain, registers on the bus, and exposes these tools:
 
 - **history:** `sessions`, `search`, `outline`, `pull`, `show`
-- **live:** `whoami`, `peers`, `send`, `reply`, `inbox`, `wait`, `thread`, `channels`, `subscribe`, `set_name`, `claim`, `release`, `claims`
+- **live:** `whoami`, `peers`, `send`, `reply`, `receipt`, `inbox`, `wait`, `thread`, `channels`, `subscribe`, `set_name`, `claim`, `release`, `claims`
 
 `puenteo install` registers it for Claude Code (`claude mcp add -s user`), Codex (`codex mcp add`), Gemini, Qwen, Cursor, OpenCode, Copilot and Antigravity.
 

@@ -176,8 +176,8 @@ def _peek_claude_title(path: str) -> Optional[str]:
                     o = json.loads(line)
                 except Exception:
                     continue
-                if o.get("type") == "ai-title" and o.get("title"):
-                    return str(o["title"])[:120]
+                if o.get("type") == "ai-title" and (o.get("aiTitle") or o.get("title")):
+                    return str(o.get("aiTitle") or o["title"])[:120]
                 if o.get("type") == "user":
                     text = _extract_text(o.get("message", {}).get("content"))
                     if text:
@@ -394,15 +394,13 @@ def _load_claude(path: str, *, include_tools: bool, include_thinking: bool) -> T
             except Exception:
                 continue
             t = o.get("type")
-            if t == "ai-title" and o.get("title"):
-                title = str(o["title"])
+            if t == "ai-title" and (o.get("aiTitle") or o.get("title")):
+                title = str(o.get("aiTitle") or o["title"])
                 continue
             if t not in ("user", "assistant", "system"):
                 continue
             if o.get("cwd") and not cwd:
                 cwd = o["cwd"]
-            if o.get("sessionId"):
-                session_id = o["sessionId"]
 
             msg = o.get("message") or {}
             role = msg.get("role") or t

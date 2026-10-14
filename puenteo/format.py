@@ -71,7 +71,7 @@ def format_session_list(
                 lines.append(session_row(s, pref.get(s.session_id)))
         lines.append("")
         lines.append(
-            f"{len(sessions)} session(s). Use: asb show <id>  |  asb pull <id> --query '…'"
+            f"{len(sessions)} session(s). Use: puenteo show <id>  |  puenteo pull <id> --query '…'"
         )
         return "\n".join(lines)
 
@@ -83,7 +83,7 @@ def format_session_list(
         lines.append(session_row(s, pref.get(s.session_id).ljust(width)))
     lines.append("")
     lines.append(
-        f"{len(sessions)} session(s). Use: asb show <id>  |  asb pull <id> --query '…'  (or puenteo …)"
+        f"{len(sessions)} session(s). Use: puenteo show <id>  |  puenteo pull <id> --query '…'"
     )
     lines.append("Tip: id prefix works (e.g. pull 3627012b). Filter: list --cwd ~/proj")
     return "\n".join(lines)
@@ -218,7 +218,7 @@ def format_hits(hits: List[Hit], *, json_mode: bool = False) -> str:
         lines.append("")
 
     lines.append(
-        "Pull one: asb pull <session_id_or_prefix> --query '…' --mode query"
+        "Pull one: puenteo pull <session_id_or_prefix> --query '…' --mode query"
     )
     lines.append(
         "Scope search: --session <id>  |  exclude self: --exclude-session <id>"
@@ -288,9 +288,9 @@ def format_outline(outline: Dict[str, Any], *, json_mode: bool = False) -> str:
 
     lines.append("")
     lines.append(
-        "Next: asb pull <id> --mode decisions | --query '…' | --around <msg#>"
+        "Next: puenteo pull <id> --mode decisions | --query '…' | --around <msg#>"
     )
-    lines.append("      asb show <id> --range A:B")
+    lines.append("      puenteo show <id> --range A:B")
     return "\n".join(lines)
 
 

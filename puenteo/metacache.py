@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from .paths import index_db_path
 
-_SCHEMA_VERSION = 3
+_SCHEMA_VERSION = 4
 
 _lock = threading.Lock()
 _mem: Optional[Dict[Tuple[str, str], Tuple[int, float, Any]]] = None

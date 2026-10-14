@@ -10,7 +10,9 @@ description: >-
 
 # puenteo-bus — live messaging between agent sessions
 
-Every session has an address `agent:session-id` (e.g. `claude:8765…`, `codex:01a1…`). `puenteo whoami` prints yours; `puenteo ps` lists everyone running now. If the puenteo MCP server is connected, the same actions exist as tools (`peers`, `send`, `inbox`, `reply`, `wait`, `claim`, …) — prefer them.
+Every session has an address `agent:session-id` (e.g. `claude:8765…`, `codex:01a1…`). `puenteo whoami` prints yours; `puenteo ps` lists everyone running now. If the puenteo MCP server is connected, the same actions exist as tools (`peers`, `send`, `inbox`, `reply`, `wait`, `receipt`, `claim`, …) — prefer them.
+
+If the MCP `whoami` says `provisional`, the server could not tell which session it belongs to (common in the Codex app). Run `puenteo whoami` in your shell and call the MCP `whoami` with `session=<that address>`; until then peers can't reach you.
 
 ## See who is around
 
@@ -28,11 +30,19 @@ puenteo send @reviewer "PR ready: branch feat/x" --wait 300          # block up 
 puenteo send cwd:. "I'm refactoring src/db, avoid it for 30 min"     # everyone in this repo
 puenteo send '#release' "v0.8 tagged"                                # channel (posting joins it)
 puenteo send agent:codex "…"   |   puenteo send '*' "…"               # all codex / everyone
+puenteo send @reviewer - <<'EOF'                                     # long text or `backticks`/$vars: use stdin
+Look at `src/db.py`, the $PATH check is wrong.
+EOF
+puenteo receipt <msg-id>      # did they read it? (instead of polling ps/outline)
 puenteo inbox                 # read what others sent you
 puenteo reply <msg-id> "answer"                                      # routes back to sender/channel
 puenteo wait -t 120           # block until something arrives (exit 3 on timeout)
 puenteo join --name reviewer -c release                             # pick an @name, join channels
 ```
+
+Read the delivery line `send` prints for each recipient. `pushed` or `its hook/watch shows it` means it will be seen. `queued, NOT pushed` means the recipient sees it only when it checks its inbox, which may be hours. Don't tell the user it was received, and don't resend; check `puenteo receipt <id>` later.
+
+In shell commands, put message text in single quotes or a quoted heredoc. Inside double quotes the shell runs `` `…` `` and expands `$x` before puenteo sees the text, and those words silently vanish from the message.
 
 ## Other machines (mesh)
 
@@ -72,3 +82,5 @@ puenteo release                               # when done (claims also expire)
 4. A question from a peer that needs your user's decision: say so in your reply and ask your user — don't guess on their behalf.
 5. Claim before large edits in a shared repo; release when done.
 6. When the user asked you to coordinate, report back what peers said.
+7. A session that doesn't answer is probably idle, waiting for its user. Never kill, restart, resume or type into another session's process to wake it: tell your user which session needs attention.
+8. Waiting for an answer: use `wait` / `send --wait` (one blocking call), not repeated `inbox`, `ps` or `outline` polls.

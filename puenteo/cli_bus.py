@@ -12,7 +12,7 @@ from typing import List, Optional
 from .bus import Bus, BusError, BusMessage, format_message, normalize_address
 
 BUS_COMMANDS = (
-    "ps", "whoami", "join", "send", "inbox", "reply", "wait", "watch", "thread",
+    "ps", "whoami", "join", "send", "inbox", "reply", "wait", "watch", "thread", "receipt",
     "log", "channels", "subscribe", "unsubscribe", "claim", "release", "claims", "hook", "prune",
 )
 
@@ -77,6 +77,10 @@ def add_parsers(sub, common) -> None:
     _as_flag(sp)
 
     sp = sub.add_parser("thread", help="Show a whole conversation thread")
+    common(sp)
+    sp.add_argument("id")
+
+    sp = sub.add_parser("receipt", help="Was a message I sent delivered, pushed, read? (per recipient)")
     common(sp)
     sp.add_argument("id")
 
@@ -359,6 +363,26 @@ def _run(cmd: str, args, *, json_mode: bool, cwd, providers) -> int:
 
     if cmd == "thread":
         _print_msgs(bus.thread(args.id), json_mode)
+        return 0
+
+    if cmd == "receipt":
+        m = bus.get(args.id)
+        if not m:
+            print(f"no message {args.id!r}", file=sys.stderr)
+            return 1
+        rows = bus.receipts(args.id)
+        if json_mode:
+            print(json.dumps({"id": m.id, "to": m.to, "recipients": rows}, ensure_ascii=False, indent=2))
+            return 0
+        print(f"{m.id} → {m.to}  sent {time.strftime('%Y-%m-%d %H:%M', time.localtime(m.created))}")
+        for r in rows:
+            if r["read"]:
+                st = f"read {_ago(r['read'] - m.created)} after sending"
+            else:
+                st = "NOT read yet" + (f" (pushed via {r['pushed']})" if r["pushed"] else "")
+            print(f"  {r['address']}: {st}")
+        if not rows:
+            print("  no recipients (nobody was subscribed or live)")
         return 0
 
     if cmd == "log":

@@ -766,12 +766,15 @@ class Bus:
         return Claim(resource=resource, holder=holder, note=note, created=created, expires=now + ttl_s)
 
     def release(self, holder: str, resource: str, *, force: bool = False) -> bool:
-        resource = _norm_resource(resource)
+        # match the key as stored too: claims made by older versions kept relative paths
+        keys = sorted({(resource or "").strip(), _norm_resource(resource)})
+        marks = ",".join("?" * len(keys))
         if force:
-            cur = self.con.execute("DELETE FROM claims WHERE resource=?", (resource,))
+            cur = self.con.execute(f"DELETE FROM claims WHERE resource IN ({marks})", keys)  # nosec B608 - placeholders only
         else:
             cur = self.con.execute(
-                "DELETE FROM claims WHERE resource=? AND holder=?", (resource, normalize_address(holder))
+                f"DELETE FROM claims WHERE resource IN ({marks}) AND holder=?",  # nosec B608 - placeholders only
+                (*keys, normalize_address(holder)),
             )
         return cur.rowcount > 0
 
@@ -819,13 +822,29 @@ def _overlaps(a: str, b: str) -> bool:
     return a2.startswith(b2) or b2.startswith(a2)
 
 
+_TASK_RE = re.compile(r"^[A-Za-z][\w.+-]+:(?![\\/])")
+
+
 def _norm_resource(r: str) -> str:
+    """
+    Absolute path for anything that looks like a file or directory, whether or
+    not it exists yet (a claim on a file you are about to create must be
+    releasable after creating it). ``task:…``-style names stay free-form.
+    """
     r = (r or "").strip()
     if not r:
         raise BusError("empty resource")
-    if r.startswith(("/", "~", "./", "../")) or os.path.exists(r):
+    if _TASK_RE.match(r):
+        return r
+    if (
+        r.startswith(("/", "~", "."))
+        or "/" in r
+        or os.sep in r
+        or os.path.exists(r)
+        or re.search(r"\.[A-Za-z0-9]{1,8}$", r)
+    ):
         return os.path.abspath(os.path.expanduser(r))
-    return r  # free-form task name, e.g. "task:migrate-db"
+    return r  # free-form task name, e.g. "migrate-db"
 
 
 def _safe(s: str) -> str:

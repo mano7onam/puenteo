@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.14.0 — 2026-10-14
+
+Fixes from a field audit of 69 real sessions that used puenteo (Claude Code, Codex, Antigravity, Grok, Pi).
+
+**Identity.** Messages reached the wrong session, or no session at all.
+- `whoami` no longer guesses between threads of one Codex app-server. The old "newest thread in this cwd" rule gave one Codex session another thread's address for 8 days, and that thread's mail with it. With no reliable signal, the MCP server now stays provisional and says so. The agent can pin itself with MCP `whoami(session=…)`, using the address from `puenteo whoami` in its shell.
+- Claude: the pid file `~/.claude/sessions/<pid>.json` wins over `CLAUDE_CODE_SESSION_ID`. The env value is stale after resume or `/clear`. The MCP server re-checks its identity every 30 s and carries unread mail over when the session changes.
+- Codex app 154+ keeps no `thread-writer-locks`. Live threads now come from Codex's own `state_*.sqlite` (status `recent`). That database also failed to open with plain `mode=ro`, so Codex titles were empty; it is now opened read-only with `immutable=1` as a fallback.
+- Claude forks and resumed transcripts keep their own id (the file name), with `forked_from` set to the parent. `pull`/`outline` on such a session used to say "not found". Titles come from the newest `aiTitle` record.
+- Provisional `agent:pidNNN` peers disappear from `ps` after 10 minutes without a heartbeat.
+
+**Delivery.** Senders believed messages had arrived when they had not.
+- `ps` lists `hook` as a delivery path only when a puenteo hook is actually installed. Before, it was hardcoded for every Claude session.
+- `send` and `reply` say per recipient what will happen: `pushed`, `its hook/watch shows it`, or `queued, NOT pushed: the recipient sees it only when it calls inbox`. A failed `codex queue` push now reads `NOT pushed (…)`.
+- New `puenteo receipt <id>` and MCP `receipt`: delivered, pushed and read, per recipient. Use it instead of polling `ps` and `outline`.
+- MCP and HTTP `send` return within 12 s even if a push hangs. An MCP send once blocked for more than 2 minutes and the agent sent the message twice.
+- `doctor` warns when Claude or Codex hooks are missing, and when Codex runs with no detectable thread.
+
+**Claims.** A claim on a file that did not exist yet could not be released after the file was created ("released 0 claim(s)"). Paths are now normalised the same way whether or not they exist, and `release` also matches legacy keys.
+
+**Skill and hints.** The puenteo-bus skill covers:
+- the provisional identity and how to pin it;
+- how to read the delivery line;
+- heredoc and single quotes, so backticks and `$vars` don't vanish from messages;
+- `wait` instead of polling;
+- never kill or restart another session to wake it.
+
+Output hints say `puenteo` instead of the old `asb`.
+
+Native core 0.9.2: reads `aiTitle`.
+
 ## 0.13.0 — 2026-10-09
 
 - **11 skills** instead of 2, each with sharp routing. The `puenteo` hub skill points to the right one:

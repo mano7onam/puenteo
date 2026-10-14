@@ -260,3 +260,29 @@ def test_native_matches_python(fake_home):
         finally:
             nat.core = core
         assert fast == slow
+
+
+def test_claude_fork_keeps_its_own_id_and_ai_title(fake_home):
+    """Field bugs: a resumed/forked transcript starts with the parent's sessionId (→ 'not found'),
+    and Claude's generated title lives in ``aiTitle`` and is rewritten as the chat goes on."""
+    import json
+
+    from puenteo import api
+    from puenteo.providers import list_sessions
+
+    src = fake_home["home"] / ".claude" / "projects"
+    proj = next(src.iterdir())
+    fork = "22222222-bbbb-4ccc-8ddd-000000000002"
+    rows = [
+        {"type": "user", "sessionId": CLAUDE_SID, "cwd": "/x", "message": {"role": "user", "content": "old question"}},
+        {"type": "ai-title", "aiTitle": "First title", "sessionId": fork},
+        {"type": "user", "sessionId": fork, "cwd": "/x", "message": {"role": "user", "content": "continue please"}},
+        {"type": "ai-title", "aiTitle": "Shared git source for worktrees", "sessionId": fork},
+    ]
+    with open(proj / f"{fork}.jsonl", "w", encoding="utf-8") as fh:
+        fh.write("\n".join(json.dumps(r) for r in rows) + "\n")
+    ss = [s for s in list_sessions(limit=0) if s.session_id == fork]
+    assert ss and ss[0].meta.get("forked_from") == CLAUDE_SID
+    assert ss[0].title == "Shared git source for worktrees"
+    assert api.load(fork[:8], rich=False).session.session_id == fork
+    assert api.load(fork[:8]).session_id == fork

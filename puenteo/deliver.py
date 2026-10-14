@@ -64,12 +64,66 @@ def push_pending(bus: Bus, msg: BusMessage) -> Dict[str, str]:
                 bus.mark_pushed(msg.seq, addr, "codex-queue")
                 results[addr] = "pushed (codex queue)"
             else:
-                results[addr] = f"queued in inbox (codex push failed: {err})"
+                results[addr] = f"NOT pushed (codex queue failed: {err}); {reach(bus, addr)}"
         else:
             from .plugins import deliver as plugin_deliver
 
-            results[addr] = plugin_deliver(addr, msg) or "queued in inbox"
+            results[addr] = plugin_deliver(addr, msg) or reach(bus, addr)
     return results
+
+
+def push_bounded(msg: BusMessage, *, deadline: float = 12.0, bus_path: Optional[str] = None) -> Dict[str, str]:
+    """
+    ``push_pending`` with a time limit, for servers that must answer promptly
+    (an MCP ``send`` once hung for minutes and the agent sent the message twice).
+    The message is already stored; a slow push keeps going in the background.
+    """
+    import threading
+
+    box: Dict[str, Any] = {}
+
+    def run() -> None:
+        try:
+            with Bus(bus_path) as b:
+                box["r"] = push_pending(b, msg)
+        except Exception as e:  # never fail the send because push failed
+            box["e"] = str(e)
+
+    t = threading.Thread(target=run, name="puenteo-push", daemon=True)
+    t.start()
+    t.join(deadline)
+    if "r" in box:
+        return box["r"]
+    recips = msg.meta.get("recipients") or []
+    if "e" in box:
+        return {r: f"stored; push failed: {box['e']}" for r in recips}
+    return {r: f"stored; push still running after {deadline:.0f}s (don't resend)" for r in recips}
+
+
+def reach(bus: Bus, addr: str) -> str:
+    """
+    What happens to a queued message for ``addr``: will something show it to
+    the recipient, or does it sit there until the recipient calls inbox itself?
+    Said plainly, because senders used to read "queued" as "delivered".
+    """
+    agent, _, _sid = addr.partition(":")
+    try:
+        p = bus.peer(addr)
+    except Exception:
+        p = None
+    if p is not None and p.alive() and p.via == "watch":
+        return "queued; its watch shows it within seconds"
+    cwd = p.cwd if p is not None else ""
+    try:
+        from .live import hooks_installed
+
+        hooked = hooks_installed(agent, cwd) or (p is not None and p.via == "hook")
+    except Exception:
+        hooked = False
+    if hooked:
+        return "queued; its hook shows it at its next turn (an idle session sees it when the user next types)"
+    return ("queued, NOT pushed: the recipient sees it only when it calls inbox/wait itself "
+            "(no hook or watch on its side). Don't assume it was read; check `puenteo receipt <id>`")
 
 
 # ----------------------------------------------------------------------------- watch

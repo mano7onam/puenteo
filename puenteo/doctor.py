@@ -7,6 +7,7 @@ import os
 import shutil
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 from typing import List, Tuple
 
@@ -71,6 +72,20 @@ def checks() -> List[Tuple[str, str, str]]:
                 else:
                     out.append((f"{ag.name} skill {name}", WARN, f"missing in {d} → `puenteo install`"))
         out.append((f"{ag.name} mcp", *_mcp_state(ag.name)))
+        if ag.name in ("claude", "codex"):
+            from .live import hooks_installed
+
+            if hooks_installed(ag.name, os.getcwd()):
+                out.append((f"{ag.name} hooks", OK, "messages are shown to idle sessions at their next turn"))
+            else:
+                out.append((f"{ag.name} hooks", WARN, "not installed: a message reaches a session only when it calls "
+                                                      "inbox itself → `puenteo install --hooks`"))
+    if sys.platform != "win32":
+        from .live import _codex_sessions, _pids_matching
+
+        if _pids_matching("codex app-server") and not _codex_sessions():
+            out.append(("codex live threads", WARN, "Codex is running but no thread was active in the last 20 min "
+                                                    "(no thread-writer-locks; using ~/.codex/state_*.sqlite)"))
     return out
 
 

@@ -61,8 +61,10 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
         except OSError:
             continue
 
-        title, real_cwd, sid = _peek_cached(path)
-        sid = sid or os.path.splitext(os.path.basename(path))[0]
+        # The file name is the session id. A resumed or forked transcript starts
+        # with its parent's records (and sessionId); keep that as forked_from.
+        title, real_cwd, first_sid = _peek_cached(path)
+        sid = os.path.splitext(os.path.basename(path))[0]
         real_cwd = real_cwd or approx_cwd
 
         if cwd and not cwd_matches(cwd, real_cwd):
@@ -79,7 +81,7 @@ def list_sessions(*, cwd: Optional[str] = None) -> List[Session]:
                 cwd=real_cwd,
                 mtime=st.st_mtime,
                 size=st.st_size,
-                meta={"project_dir": proj},
+                meta={"project_dir": proj, **({"forked_from": first_sid} if first_sid and first_sid != sid else {})},
             )
         )
     out.sort(key=lambda s: s.mtime, reverse=True)
@@ -134,8 +136,8 @@ def session_from_path(path: str) -> Optional[Session]:
         return None
     if "/subagents/" in path.replace("\\", "/"):
         return _subagent_session(path, None)
-    title, cwd, sid = _peek_cached(path)
-    sid = sid or os.path.splitext(os.path.basename(path))[0]
+    title, cwd, first_sid = _peek_cached(path)
+    sid = os.path.splitext(os.path.basename(path))[0]
     st = os.stat(path)
     return Session(
         provider="claude_code",
@@ -145,6 +147,7 @@ def session_from_path(path: str) -> Optional[Session]:
         cwd=cwd or "",
         mtime=st.st_mtime,
         size=st.st_size,
+        meta={"forked_from": first_sid} if first_sid and first_sid != sid else {},
     )
 
 
@@ -175,8 +178,8 @@ def _peek(path: str) -> Tuple[str, str, str]:
                 if o.get("cwd") and not cwd:
                     cwd = str(o["cwd"])
                 t = o.get("type")
-                if t == "ai-title" and o.get("title") and not title:
-                    cand = clean_title(str(o["title"]), 160)
+                if t == "ai-title" and (o.get("aiTitle") or o.get("title")) and not title:
+                    cand = clean_title(str(o.get("aiTitle") or o["title"]), 160)
                     if cand:
                         title = cand
                 if t == "user" and not title and not o.get("isMeta"):
@@ -188,7 +191,32 @@ def _peek(path: str) -> Tuple[str, str, str]:
                         title = cand
     except Exception:
         pass
-    return title, cwd, sid
+    ai = _last_ai_title(path)
+    return ai or title, cwd, sid
+
+
+def _last_ai_title(path: str, tail: int = 256 * 1024) -> str:
+    """Claude rewrites its generated title as the chat goes on; the last ``ai-title`` record is current."""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - tail))
+            buf = fh.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+    for line in reversed(buf.splitlines()):
+        if '"ai-title"' not in line:
+            continue
+        try:
+            o = json.loads(line)
+        except Exception:
+            continue
+        if o.get("type") == "ai-title":
+            cand = clean_title(str(o.get("aiTitle") or o.get("title") or ""), 160)
+            if cand:
+                return cand
+    return ""
 
 
 def load_transcript(session: Session, *, include_tools: bool = False) -> Transcript:
@@ -241,8 +269,8 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
             except Exception:
                 continue
             t = o.get("type")
-            if t == "ai-title" and o.get("title"):
-                cand = clean_title(str(o["title"]), 160)
+            if t == "ai-title" and (o.get("aiTitle") or o.get("title")):
+                cand = clean_title(str(o.get("aiTitle") or o["title"]), 160)
                 if cand:
                     title = cand
                 continue
@@ -326,7 +354,6 @@ def load_transcript(session: Session, *, include_tools: bool = False) -> Transcr
 
     if not session.meta.get("subagent"):
         session.title = title or session.title
-        session.session_id = sid or session.session_id
     session.cwd = cwd or session.cwd
     session.message_count = len(messages)
     return Transcript(session=session, messages=messages)

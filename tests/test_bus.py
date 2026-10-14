@@ -315,3 +315,145 @@ def test_mcp_provisional_identity_is_adopted(bus, monkeypatch):
     assert srv.identity() == "codex:real-thread-1"
     assert [m.body for m in bus.inbox("codex:real-thread-1")] == ["early message"]
     assert bus.peer("codex:real-thread-1").name == "beta" and bus.peer(tmp) is None
+
+
+def test_release_claim_on_file_created_after_claiming(bus, tmp_path, monkeypatch):
+    """Field bug: claim g/a.md, create it, release → 'released 0'. The key must not depend on existence."""
+    from puenteo.cli import main
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PUENTEO_SESSION", "claude:bbbb2222")
+    assert main(["claim", "g/a.md", "notes.md"]) == 0
+    (tmp_path / "g").mkdir()
+    (tmp_path / "g" / "a.md").write_text("x")
+    (tmp_path / "notes.md").write_text("x")
+    assert bus.release("claude:bbbb2222", "g/a.md")
+    assert main(["release"]) == 0  # bare release frees the rest
+    assert bus.claims() == []
+    bus.claim("claude:bbbb2222", "task:migrate-db")
+    assert bus.claims()[0].resource == "task:migrate-db"
+
+
+def test_legacy_relative_claim_still_releasable(bus, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    bus.con.execute("INSERT INTO claims(resource, holder, note, created, expires) VALUES ('old.md','claude:bbbb2222','',0,9e12)")
+    assert bus.release("claude:bbbb2222", "old.md")
+
+
+def test_mcp_identity_follows_claude_resume_and_keeps_unread(bus, monkeypatch):
+    """Claude rewrites its pid file on resume/clear; a long-lived MCP server must follow and carry unread mail."""
+    from puenteo import live
+    from puenteo.mcp import Server
+
+    who = {"sid": "old-sid"}
+    monkeypatch.setattr(live, "whoami", lambda **kw: live.Me(agent="claude_code", session_id=who["sid"], cwd="/x"))
+    srv = Server()
+    assert srv.identity() == "claude:old-sid"
+    bus.send("codex:aaaa1111", "claude:old-sid", "heads-up")
+    who["sid"] = "new-sid"
+    srv._checked = 0  # skip the 30 s recheck interval
+    assert srv.identity() == "claude:new-sid"
+    assert [m.body for m in bus.inbox("claude:new-sid")] == ["heads-up"]
+
+
+def test_mcp_whoami_session_pins_identity(bus, monkeypatch):
+    from puenteo import live
+    from puenteo.mcp import Server
+    import puenteo.api as api
+
+    monkeypatch.setattr(live, "whoami", lambda **kw: None)
+
+    class S:  # minimal stand-in for a resolved history session
+        provider, session_id, cwd = "codex", "01a1-real-thread", "/proj"
+
+    monkeypatch.setattr(api, "get_session", lambda ref, **kw: S() if "01a1" in ref else None)
+    srv = Server()
+    srv.client = {"name": "codex-mcp-client"}
+    out = srv.handlers["whoami"]({})
+    assert out["provisional"] and "puenteo whoami" in out["hint"]
+    out = srv.handlers["whoami"]({"session": "codex:01a1"})
+    assert out["address"] == "codex:01a1-real-thread" and "provisional" not in out
+    from puenteo.bus import BusError
+
+    with pytest.raises(BusError):
+        srv.handlers["whoami"]({"session": "codex:nope"})
+
+
+def test_send_says_plainly_when_nothing_will_show_the_message(bus, monkeypatch, capsys):
+    from puenteo.cli import main
+
+    monkeypatch.delenv("PUENTEO_NO_PUSH")
+    monkeypatch.setenv("PUENTEO_SESSION", "claude:bbbb2222")
+    capsys.readouterr()
+    assert main(["send", "gemini:cccc3333", "hi"]) == 0
+    out = capsys.readouterr().out
+    assert "NOT pushed" in out and "inbox" in out
+    mid = out.split()[1]
+    assert main(["receipt", mid]) == 0
+    assert "NOT read yet" in capsys.readouterr().out
+    monkeypatch.setenv("PUENTEO_SESSION", "gemini:cccc3333")
+    bus.inbox("gemini:cccc3333")
+    assert main(["receipt", mid]) == 0
+    assert "read " in capsys.readouterr().out
+
+
+def test_claude_delivery_lists_hook_only_when_installed(tmp_path, monkeypatch):
+    import json as _json
+
+    from puenteo import live
+
+    home = tmp_path / "h"
+    (home / ".claude").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    live._hooks_cache.clear()
+    assert not live.hooks_installed("claude", "")
+    (home / ".claude" / "settings.json").write_text(_json.dumps(
+        {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "puenteo hook Stop --agent claude"}]}]}}))
+    live._hooks_cache.clear()
+    assert live.hooks_installed("claude", "")
+    (home / ".claude" / "settings.json").write_text(_json.dumps({"enabledPlugins": {"puenteo@puenteo": True}}))
+    live._hooks_cache.clear()
+    assert live.hooks_installed("claude", "")
+
+
+def test_whoami_does_not_guess_between_codex_threads(bus, monkeypatch):
+    """Field bug: an app-server hosting many threads made whoami pick another thread (and read its mail)."""
+    import os
+
+    from puenteo import live
+
+    me = os.getpid()
+    monkeypatch.setattr(live, "parent_pids", lambda pid=None, depth=12: [me, 4242])
+    monkeypatch.setattr(live, "nearest_agent", lambda pid=None: ("codex", 4242))
+    rows = [live.LiveSession(agent="codex", session_id=s, pid=4242, cwd=os.getcwd(), updated_at=t)
+            for s, t in (("thread-a", 1.0), ("thread-b", 2.0))]
+    monkeypatch.setattr(live, "_codex_sessions", lambda: rows)
+    live._whoami_cache.clear()
+    assert live.whoami() is None
+    monkeypatch.setattr(live, "_codex_sessions", lambda: rows[:1])
+    live._whoami_cache.clear()
+    assert live.whoami().session_id == "thread-a"
+
+
+def test_codex_live_falls_back_to_state_db(tmp_path, monkeypatch):
+    """Newer Codex keeps no thread-writer-locks; recent threads come from state_*.sqlite instead."""
+    import sqlite3
+    import time as _t
+
+    from puenteo import live
+
+    home = tmp_path / "h"
+    (home / ".codex").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    con = sqlite3.connect(str(home / ".codex" / "state_5.sqlite"))
+    con.execute("CREATE TABLE threads (id TEXT, title TEXT, cwd TEXT, updated_at_ms INTEGER, archived INTEGER)")
+    now = int(_t.time() * 1000)
+    con.execute("INSERT INTO threads VALUES ('t-new','Fix the build','/p',?,0)", (now,))
+    con.execute("INSERT INTO threads VALUES ('t-old','Old','/p',?,0)", (now - 86400_000,))
+    con.execute("INSERT INTO threads VALUES ('t-arch','Gone','/p',?,1)", (now,))
+    con.commit()
+    con.close()
+    monkeypatch.setattr(live, "_pids_matching", lambda pat: [4242])
+    rows = live._codex_sessions()
+    assert [r.session_id for r in rows] == ["t-new"]
+    assert rows[0].status == "recent" and rows[0].name == "Fix the build" and "codex-queue" in rows[0].delivery
